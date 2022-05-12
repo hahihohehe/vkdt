@@ -1,0 +1,56 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+} push;
+
+layout( // input rggb original
+    set = 1, binding = 0
+) uniform sampler2D img_orig;
+
+layout( // output f16 buffer rgb
+    set = 1, binding = 1
+) uniform writeonly image2D img_out;
+
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+
+  if(push.filters != 9)
+  { // bayer
+    ivec2 base = ivec2(ipos.x - (ipos.x%2), ipos.y - (ipos.y%2));
+    float acc = 0;
+    acc += texelFetch(img_orig, base, 0).r;
+    acc += texelFetch(img_orig, base + ivec2(1, 1), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(1, 0), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(0, 1), 0).r;
+    acc /= 4.0;
+    imageStore(img_out, ipos, vec4(acc, acc, acc, 1));
+  }
+  else
+  { // xtrans
+    ivec2 base = ivec2(ipos.x - (ipos.x%3), ipos.y - (ipos.y%3));
+    float acc = 0;
+    acc += texelFetch(img_orig, base, 0).r;
+    acc += texelFetch(img_orig, base + ivec2(0, 1), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(0, 2), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(1, 0), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(1, 1), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(1, 2), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(2, 0), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(2, 1), 0).r;
+    acc += texelFetch(img_orig, base + ivec2(2, 2), 0).r;
+    acc /= 9.0;
+    imageStore(img_out, ipos, vec4(acc, acc, acc, 1));
+  }
+}
