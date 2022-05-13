@@ -1,0 +1,108 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+} push;
+
+layout( // input rggb original
+    set = 1, binding = 0
+) uniform sampler2D img;
+
+layout( // input offsets
+set = 1, binding = 1
+) uniform sampler2D off;
+
+layout( // input mask
+set = 1, binding = 2
+) uniform sampler2D mask;
+
+layout( // input accumulation buffer
+set = 1, binding = 3
+) uniform sampler2D acc_in;
+
+layout( // input weights
+set = 1, binding = 4
+) uniform sampler2D cont_in;
+
+layout( // gradients
+set = 1, binding = 5
+) uniform sampler2D grad;
+
+layout( // output f16 rgb accumulation buffer
+    set = 1, binding = 6
+) uniform writeonly image2D acc_out;
+
+layout( // output f16 rgb weights
+set = 1, binding = 7
+) uniform writeonly image2D cont_out;
+
+// mostly copied from align/splat
+void
+eval_gauss(
+vec4 cov, vec2 pointpos,
+ivec2 samplepos,
+out float weight)
+{
+  vec2 o = samplepos - pointpos;
+  vec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
+  mat2 E = mat2(cov.z, -cov.w,
+  cov.w,  cov.z);
+  vec2 of = E * o;
+  weight = clamp(exp(-0.5*dot(of/eval, of)), 1e-4, 1.0);
+}
+
+vec4
+color_vec(    // get a normalized vector with one of r, g, b being 1, all other entries 0 according to bayer mosaic
+ivec2 pos
+)
+{
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
+  if (boff == ivec2(1, 0) || boff == ivec2(0, 1))
+  {
+    return vec4(0, 1, 0, 0);
+  }
+  else if (boff == ivec2(0, 0))
+  {
+    return vec4(1, 0, 0, 0);
+  }
+  else
+  {
+    return vec4(0, 0, 1, 0);
+  }
+}
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+
+  vec2 epos = ipos + texelFetch(off, ipos, 0).xy;   // effective position
+
+  // TODO: support rgb and xtrans input
+  for (int i = -5; i <= 5; i++)
+  {
+    for (int j = -5; j <= 5; j++)
+    {
+      // TODO: include mask and gradients
+      float weight;
+      vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
+      ivec2 samplepos = ivec2(epos) + ivec2(i, j);    // center sampling around floor(epos)
+      eval_gauss(cov, epos, samplepos, weight);
+      vec4 a = texelFetch(acc_in);
+      float intensity = texelFetch(img, ipos, 0).r;
+      a += weight * intensity * color_vec(ipos);
+      imageStore(acc_out, samplepos, a);
+      vec4 w = texelFetch(cont_in);
+      w += weight * color_vec(ipos);
+      imageStore(cont_out, samplepos, w);
+    }
+  }
+}

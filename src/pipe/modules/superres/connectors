@@ -1,2 +1,11 @@
-input:read:rggb:*
+reference:read:rggb:*
+input1:read:rggb:*
+mv1:read:rg:f16
+mask1:read:y:f16
+input2:read:rggb:*
+mv2:read:rg:f16
+mask2:read:y:f16
+input3:read:rggb:*
+mv3:read:rg:f16
+mask3:read:y:f16
 output:write:rgba:f16
