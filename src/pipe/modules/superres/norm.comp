@@ -1,0 +1,38 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+} push;
+
+layout( // input rgb accumulation buffer
+    set = 1, binding = 0
+) uniform sampler2D acc;
+
+layout( // input weights
+set = 1, binding = 1
+) uniform sampler2D cont;
+
+layout( // output f16 buffer rgb
+    set = 1, binding = 2
+) uniform writeonly image2D img_out;
+
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+
+  vec4 col = texelFetch(acc, ipos, 0);
+  vec4 weight = texelFetch(cont, ipos, 0);
+  col /= weight;
+  col.a = 1.0;
+  imageStore(img_out, ipos, col);
+}

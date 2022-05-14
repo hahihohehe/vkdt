@@ -15,32 +15,16 @@ layout( // input rggb original
     set = 1, binding = 0
 ) uniform sampler2D img;
 
-layout( // input offsets
-set = 1, binding = 1
-) uniform sampler2D off;
-
-layout( // input mask
-set = 1, binding = 2
-) uniform sampler2D mask;
-
-layout( // input accumulation buffer
-set = 1, binding = 3
-) uniform sampler2D acc_in;
-
-layout( // input weights
-set = 1, binding = 4
-) uniform sampler2D cont_in;
-
 layout( // gradients
-set = 1, binding = 5
+set = 1, binding = 1
 ) uniform sampler2D grad;
 
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 6
+    set = 1, binding = 2
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 7
+set = 1, binding = 3
 ) uniform writeonly image2D cont_out;
 
 // mostly copied from align/splat
@@ -51,7 +35,7 @@ out float weight)
 {
   vec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
   mat2 E = mat2(cov.z, -cov.w,
-  cov.w,  cov.z);
+                cov.w,  cov.z);
   vec2 of = E * off;
   weight = clamp(exp(-0.5*dot(of/eval, of)), 1e-4, 1.0);
 }
@@ -82,14 +66,14 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
-  vec2 epos = ipos + texelFetch(off, ipos, 0).xy;   // effective position
+  vec2 epos = ipos;   // effective position (eqals ipos because this is reference image)
 
   // TODO: support rgb and xtrans input
   for (int i = -5; i <= 5; i++)
   {
     for (int j = -5; j <= 5; j++)
     {
-      // TODO: include mask and gradients
+      // TODO: include gradients
       float weight;
       vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
       ivec2 samplepos = ivec2(epos) + ivec2(i, j);    // center sampling around floor(epos)
