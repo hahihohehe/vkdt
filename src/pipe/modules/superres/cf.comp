@@ -42,7 +42,7 @@ out float weight)
 
 vec4
 color_vec(    // get a normalized vector with one of r, g, b being 1, all other entries 0 according to bayer mosaic
-ivec2 pos
+ivec2 ipos
 )
 {
   ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
@@ -76,18 +76,18 @@ main()
       // TODO: include gradients
       float weight;
       vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
-      ivec2 samplepos = ivec2(epos) + ivec2(i, j);    // center sampling around floor(epos)
+      ivec2 refpos = ivec2(epos) + ivec2(i, j);    // center sampling around floor(epos)
       ivec2 sourcepos = ipos + ivec2(i, j);
-      if (any(greaterThanEqual(sourcepos, imageSize(img)))) return;
-      if (any(lessThan(sourcepos, 0))) return;
-      eval_gauss(cov, epos - samplepos, weight);
-      vec4 a = texelFetch(acc_in);
+      if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) return;
+      if (any(lessThan(sourcepos, ivec2(0, 0)))) return;
+      eval_gauss(cov, epos - refpos, weight);
+      vec4 a = vec4(0, 0, 0, 0);
       float intensity = texelFetch(img, sourcepos, 0).r;
       a += weight * intensity * color_vec(ipos);
-      imageStore(acc_out, samplepos, a);
-      vec4 w = texelFetch(cont_in, sourcepos, 0);
+      imageStore(acc_out, refpos, a);
+      vec4 w = vec4(0, 0, 0, 0);
       w += weight * color_vec(ipos);
-      imageStore(cont_out, samplepos, w);
+      imageStore(cont_out, refpos, w);
     }
   }
 }

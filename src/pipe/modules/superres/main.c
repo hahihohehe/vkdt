@@ -20,7 +20,7 @@ void modify_roi_out(
         dt_module_t *module)
 {
     dt_roi_t *ri = &module->connector[0].roi;
-    dt_roi_t *ro = &module->connector[1].roi;
+    dt_roi_t *ro = &module->connector[10].roi;
 
     // always give full size and negotiate half or not in modify_roi_in
     ro->full_wd = ri->full_wd;
