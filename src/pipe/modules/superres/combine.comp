@@ -31,16 +31,16 @@ layout( // input weights
 set = 1, binding = 4
 ) uniform sampler2D cont_in;
 
-layout( // gradients
+/*layout( // gradients
 set = 1, binding = 5
-) uniform sampler2D grad;
+) uniform sampler2D grad;*/
 
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 6
+    set = 1, binding = 5
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 7
+set = 1, binding = 6
 ) uniform writeonly image2D cont_out;
 
 // mostly copied from align/splat

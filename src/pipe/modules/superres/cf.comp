@@ -15,16 +15,16 @@ layout( // input rggb original
     set = 1, binding = 0
 ) uniform sampler2D img;
 
-layout( // gradients
+/*layout( // gradients
 set = 1, binding = 1
-) uniform sampler2D grad;
+) uniform sampler2D grad;*/
 
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 2
+    set = 1, binding = 1
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 3
+set = 1, binding = 2
 ) uniform writeonly image2D cont_out;
 
 // mostly copied from align/splat
@@ -81,11 +81,11 @@ main()
       if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) return;
       if (any(lessThan(sourcepos, ivec2(0, 0)))) return;
       eval_gauss(cov, epos - refpos, weight);
-      vec4 a = vec4(0, 0, 0, 0);
+      vec4 a = imageLoad(acc_out, refpos);
       float intensity = texelFetch(img, sourcepos, 0).r;
       a += weight * intensity * color_vec(ipos);
       imageStore(acc_out, refpos, a);
-      vec4 w = vec4(0, 0, 0, 0);
+      vec4 w = imageLoad(acc_out, refpos);
       w += weight * color_vec(ipos);
       imageStore(cont_out, refpos, w);
     }
