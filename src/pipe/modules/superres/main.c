@@ -238,7 +238,7 @@ create_nodes(
         CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 1));     // cont
     }
 
-    if (module->connector[1].roi.scale == 1.0) {
+    if (1 || module->connector[1].roi.scale == 1.0) {
         // no resampling needed
 
         // connect output

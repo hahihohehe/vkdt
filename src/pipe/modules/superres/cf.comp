@@ -66,28 +66,27 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
-  vec2 epos = ipos;   // effective position (eqals ipos because this is reference image)
-
   // TODO: support rgb and xtrans input
-  for (int i = -5; i <= 5; i++)
+  vec4 acc = vec4(0, 0, 0, 1);  // because first image
+  vec4 wsum = vec4(0, 0, 0, 1);
+  for (int i = -4; i <= 4; i++)
   {
-    for (int j = -5; j <= 5; j++)
+    for (int j = -4; j <= 4; j++)
     {
       // TODO: include gradients
       float weight;
       vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
-      ivec2 refpos = ivec2(epos) + ivec2(i, j);    // center sampling around floor(epos)
-      ivec2 sourcepos = ipos + ivec2(i, j);
-      if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) return;
-      if (any(lessThan(sourcepos, ivec2(0, 0)))) return;
-      eval_gauss(cov, epos - refpos, weight);
-      vec4 a = imageLoad(acc_out, refpos);
+      ivec2 sourcepos = ivec2(ipos) + ivec2(i, j);    // position of sample
+      vec2 actualsourcepos = sourcepos;   // only because offset is 0
+      if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
+      if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+      eval_gauss(cov, actualsourcepos - ipos, weight);
       float intensity = texelFetch(img, sourcepos, 0).r;
-      a += weight * intensity * color_vec(ipos);
-      imageStore(acc_out, refpos, a);
-      vec4 w = imageLoad(acc_out, refpos);
-      w += weight * color_vec(ipos);
-      imageStore(cont_out, refpos, w);
+      acc += weight * intensity * color_vec(sourcepos);
+      wsum += 0.1 * weight * color_vec(sourcepos);
     }
   }
+
+  imageStore(acc_out, ipos, acc);
+  imageStore(cont_out, ipos, wsum);
 }
