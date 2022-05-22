@@ -46,16 +46,20 @@ ivec2 ipos
 )
 {
   ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
-  if (boff == ivec2(1, 0) || boff == ivec2(0, 1))
-  {
+  if (boff == ivec2(1, 0))
+  {   // green
+    return vec4(0, 1, 0, 0);
+  }
+  else if (boff == ivec2(0, 1))
+  {   // green
     return vec4(0, 1, 0, 0);
   }
   else if (boff == ivec2(0, 0))
-  {
+  {   // red
     return vec4(1, 0, 0, 0);
   }
   else
-  {
+  {   // blue
     return vec4(0, 0, 1, 0);
   }
 }
@@ -69,9 +73,9 @@ main()
   // TODO: support rgb and xtrans input
   vec4 acc = vec4(0, 0, 0, 1);  // because first image
   vec4 wsum = vec4(0, 0, 0, 1);
-  for (int i = -4; i <= 4; i++)
+  for (int i = -3; i <= 3; i++)
   {
-    for (int j = -4; j <= 4; j++)
+    for (int j = -3; j <= 3; j++)
     {
       // TODO: include gradients
       float weight;

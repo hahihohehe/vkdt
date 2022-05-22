@@ -10,6 +10,9 @@ void modify_roi_in(
 {
     dt_roi_t *ri = &module->connector[0].roi;
 
+    // full volle output
+    // wd: was ich rendern möchconnectorte
+    // scale: factor zw. den beiden
     ri->wd = ri->full_wd;
     ri->ht = ri->full_ht;
     ri->scale = 1.0f;
