@@ -72,6 +72,7 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
+  /*
   // TODO: support rgb and xtrans input
   vec4 acc = vec4(0, 0, 0, 1);  // because first image
   vec4 wsum = vec4(0, 0, 0, 1);
@@ -94,7 +95,34 @@ main()
       wsum += 0.1 * weight * color_vec(sourcepos);
     }
   }
-
   imageStore(acc_out, ipos, acc);
   imageStore(cont_out, ipos, wsum);
+  */
+
+  vec4 col;
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
+  ivec2 bstart = ipos - boff;
+  float r = texelFetch(img, bstart, 0).r;
+  float g1 = texelFetch(img, bstart + ivec2(0, 1), 0).r;
+  float g2 = texelFetch(img, bstart + ivec2(1, 0), 0).r;
+  float b = texelFetch(img, bstart + ivec2(1, 1), 0).r;
+  if (boff == ivec2(1, 0))
+  {   // green
+    col = vec4(r, g2, b, 1);
+  }
+  else if (boff == ivec2(0, 1))
+  {   // green
+    col = vec4(r, g1, b, 1);
+  }
+  else if (boff == ivec2(0, 0))
+  {   // red
+    col = vec4(r, 0.5 * (g1 + g2), b, 1);
+  }
+  else
+  {   // blue
+    col = vec4(r, 0.5 * (g1 + g2), b, 1);
+  }
+
+  imageStore(acc_out, ipos, col);
+  imageStore(cont_out, ipos, vec4(1, 1, 1, 1));
 }
