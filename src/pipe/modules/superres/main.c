@@ -34,6 +34,7 @@ void
 create_nodes(
         dt_graph_t  *graph,
         dt_module_t *module) {
+    float scale_offset = *dt_module_param_float(module, 0);
 
     assert(graph->num_nodes < graph->max_nodes);
     const int id_cf = graph->num_nodes++;
@@ -160,9 +161,10 @@ create_nodes(
                                           .format = dt_token("f16"),
                                           .roi    = module->connector[0].roi,
                                   }},
-                    .push_constant_size = sizeof(uint32_t),
+                    .push_constant_size = sizeof(uint32_t) + sizeof(float),
                     .push_constant = {
                             module->img_param.filters,
+                            100 * scale_offset,
                     },
             };
 

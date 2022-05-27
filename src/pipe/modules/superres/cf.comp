@@ -64,6 +64,8 @@ ivec2 ipos
   }
 }
 
+#define SSIZE 2
+
 void
 main()
 {
@@ -73,9 +75,9 @@ main()
   // TODO: support rgb and xtrans input
   vec4 acc = vec4(0, 0, 0, 1);  // because first image
   vec4 wsum = vec4(0, 0, 0, 1);
-  for (int i = -3; i <= 3; i++)
+  for (int i = -SSIZE; i <= SSIZE; i++)
   {
-    for (int j = -3; j <= 3; j++)
+    for (int j = -SSIZE; j <= SSIZE; j++)
     {
       // TODO: include gradients
       float weight;
@@ -86,6 +88,8 @@ main()
       if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
       eval_gauss(cov, actualsourcepos - ipos, weight);
       float intensity = texelFetch(img, sourcepos, 0).r;
+      // acc += weight * intensity * color_vec(sourcepos);
+      // wsum += 0.1 * weight * color_vec(sourcepos);
       acc += weight * intensity * color_vec(sourcepos);
       wsum += 0.1 * weight * color_vec(sourcepos);
     }

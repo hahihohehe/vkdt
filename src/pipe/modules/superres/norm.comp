@@ -32,14 +32,16 @@ main()
 
   vec4 col = texelFetch(acc, ipos, 0);
   vec4 weight = texelFetch(cont, ipos, 0);
+
   if (weight.r == 0.0)
     weight.r = 1;
   if (weight.g == 0.0)
     weight.g = 1;
   if (weight.b == 0.0)
     weight.b = 1;
+  weight *= 10;
   col /= weight;
-  col *= 0.1;
   col.a = 1.0;
   imageStore(img_out, ipos, col);
+  // imageStore(img_out, ipos, weight);
 }

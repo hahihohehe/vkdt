@@ -9,6 +9,7 @@ layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_siz
 layout(push_constant, std140) uniform push_t
 {
   uint filters;
+  uint offset_scale;
 } push;
 
 layout( // input rggb original
@@ -62,19 +63,25 @@ ivec2 ipos
 )
 {
   ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
-  if (boff == ivec2(1, 0) || boff == ivec2(0, 1))
-  {
+  if (boff == ivec2(1, 0))
+  {   // green
+    return vec4(0, 1, 0, 0);
+  }
+  else if (boff == ivec2(0, 1))
+  {   // green
     return vec4(0, 1, 0, 0);
   }
   else if (boff == ivec2(0, 0))
-  {
+  {   // red
     return vec4(1, 0, 0, 0);
   }
   else
-  {
+  {   // blue
     return vec4(0, 0, 1, 0);
   }
 }
+
+#define SSIZE 2
 
 void
 main()
@@ -82,30 +89,42 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
-  vec2 epos = ipos + texelFetch(off, ipos, 0).xy;   // effective position
+  // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
+  vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
+  // vec2 epos = ipos + o;
   ivec2 scent = ivec2(epos);    // sample center: sample around epos rounded down
 
   // TODO: support rgb and xtrans input
-  vec4 acc = texelFetch(acc_in, ipos, 0);
-  vec4 wsum = texelFetch(cont_in, ipos, 0);
-  for (int i = -3; i <= 3; i++)
+  vec4 acc_old = texelFetch(acc_in, ipos, 0);
+  vec4 wsum_old = texelFetch(cont_in, ipos, 0);
+
+  vec4 acc = vec4(0, 0, 0, 0);
+  vec4 wsum = vec4(0, 0, 0, 0);
+
+  float cert = texelFetch(mask, ipos / 2, 0).r;
+  if (true || cert > .6)
   {
-    for (int j = -3; j <= 3; j++)
+    for (int i = -SSIZE; i <= SSIZE; i++)
     {
-      // TODO: include mask and gradients
-      float weight;
-      vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
-      ivec2 sourcepos = scent + ivec2(i, j);    // position of sample
-      vec2 actualsourcepos = epos + ivec2(i, j);   // fp position of source pixel
-      if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
-      if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-      eval_gauss(cov, actualsourcepos - scent, weight);
-      float intensity = texelFetch(img, sourcepos, 0).r;
-      acc += weight * intensity * color_vec(sourcepos);
-      wsum += 0.1 * weight * color_vec(sourcepos);
+      for (int j = -SSIZE; j <= SSIZE; j++)
+      {
+        // TODO: include mask and gradients
+        float weight;
+        vec4 cov = vec4(1, 1, 1, 0);// needs to be replaced according to estimated gradients
+        ivec2 sourcepos = scent + ivec2(i, j);// position of sample
+        vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
+        if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
+        if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+        eval_gauss(cov, actualsourcepos - scent, weight);
+        float intensity = texelFetch(img, sourcepos, 0).r;
+        // acc += weight * intensity * color_vec(sourcepos);
+        // wsum += 0.1 * weight * color_vec(sourcepos);
+        acc += weight * intensity * color_vec(sourcepos);
+        wsum += 0.1 * weight * color_vec(sourcepos);
+      }
     }
   }
 
-  imageStore(acc_out, ipos, acc);
-  imageStore(cont_out, ipos, wsum);
+  imageStore(acc_out, ipos, acc + acc_old);
+  imageStore(cont_out, ipos, wsum + wsum_old);
 }
