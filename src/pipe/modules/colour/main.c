@@ -3,6 +3,42 @@
 #include <math.h>
 #include <stdlib.h>
 
+void ui_callback(
+    dt_module_t *mod,
+    dt_token_t   param)
+{ // callback for import from cc24/colour picker button:
+  // retrieve instance token from our params and corresponding colour picker by that instance name:
+  const int   parid   = dt_module_get_param(mod->so, param);
+  const char *inst    = dt_module_param_string(mod, parid); if(!inst) return;
+  const int   pick_id = dt_module_get(mod->graph, dt_token("pick"), dt_token(inst));
+  if(pick_id < 0 || pick_id > mod->graph->num_modules) return;
+  const dt_module_t *mp = mod->graph->module+pick_id;
+  // retrieve rbmap data from colour picker
+  const int   pck_pid = dt_module_get_param(mp->so, dt_token("picked"));
+  const int   ref_pid = dt_module_get_param(mp->so, dt_token("ref"));
+  const int   cnt_pid = dt_module_get_param(mp->so, dt_token("nspots"));
+  // only take 18 colour patches + 1 white
+  const int   cnt = CLAMP(dt_module_param_int(mp, cnt_pid)[0], 0, 19);
+  const float *ref = dt_module_param_float(mp, ref_pid);
+  const float *pck = dt_module_param_float(mp, pck_pid);
+  const int   rbm_pid = dt_module_get_param(mod->so, dt_token("rbmap"));
+  const int   rbc_pid = dt_module_get_param(mod->so, dt_token("cnt"));
+  float *rbmap = (float *)dt_module_param_float(mod, rbm_pid);
+  int   *rbcnt = (int   *)dt_module_param_int  (mod, rbc_pid);
+  if(!rbmap || !rbcnt)     return;
+  if(!pck || !ref || !cnt) return;
+  for(int i=0;i<cnt;i++)
+  { // init source -> destination
+    const float pckb = pck[3*i+0] + pck[3*i+1] + pck[3*i+2];
+    const float refb = ref[3*i+0] + ref[3*i+1] + ref[3*i+2];
+    rbmap[4*i+0] = pck[3*i+0] / pckb;
+    rbmap[4*i+1] = pck[3*i+2] / pckb;
+    rbmap[4*i+2] = ref[3*i+0] / refb;
+    rbmap[4*i+3] = ref[3*i+2] / refb;
+  }
+  rbcnt[0] = cnt;
+}
+
 
 static inline void
 clip_poly(
@@ -155,7 +191,7 @@ create_ring(
   // source[2*12+0] = white[0];
   // source[2*12+1] = white[1];
   // TODO: further parametric manipulations?
-  // rotate chroma?
+  // rotate hue?
   // move individual colours
   // etc
 }
@@ -283,20 +319,33 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
 
   // grab params by name:
   const float *p_wb  = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("white")));
+  const float  p_tmp = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("temp")))[0];
   const int    p_cnt = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("cnt")))[0];
   const float *p_map = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("rbmap")));
         int    p_mat = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("matrix")))[0];
   // const int    p_gam = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("gamut")))[0];
   const int    p_mod = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("mode")))[0];
+  const float  p_sat = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("sat")))[0];
+  const int    p_pck = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("picked")))[0];
 
-  for(int k=0;k<4;k++) // exposure
-    f[k] = powf(2.0f, ((float*)module->param)[0]) * p_wb[k] / p_wb[1];
+  // wb and exposure mul:
+  f[0] = p_wb[0] / p_wb[1];
+  f[1] = 1.0f;
+  f[2] = p_wb[2] / p_wb[1];
+  f[3] = powf(2.0f, ((float*)module->param)[0]);
+  // linear, as the dng spec says:
+  // f[4+12+4+88+0] = 1.0f - CLAMP((p_tmp - 2856.f)/(6504.f-2856.f), 0.0f, 1.0f);
+  // turingbot reverses this function to more accurately blend along CCT:
+  f[4+12+4+88+0] = 1.0f - CLAMP(tanf(asinhf(46.3407f+p_tmp))+(-0.0287128f*cosf(0.000798585f*(714.855f-p_tmp)))+0.942275f, 0.0f, 1.0f);
+  i[4+12+4+88+1] = p_mat == 3 ? 1 : 0; // colour mode matrix or clut
+  f[4+12+4+88+2] = p_sat;
+  i[4+12+4+88+3] = p_pck;
 
   if(p_mat == 1 && !(module->img_param.cam_to_rec2020[0] > 0)) p_mat = 0; // no matrix? default to identity
   if(p_mat == 1)
   { // the one that comes with the image from the source node:
     for(int j=0;j<3;j++) for(int i=0;i<3;i++)
-      f[4+4*j+i] = module->img_param.cam_to_rec2020[3*j+i];
+      f[4+4*i+j] = module->img_param.cam_to_rec2020[3*j+i];
   }
   else if(p_mat == 2)
   { // CIE XYZ
@@ -305,7 +354,7 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
      -0.6666843518,  1.6164812366,  0.0157685458,
       0.0176398574, -0.0427706133,  0.9421031212};
     for(int j=0;j<3;j++) for(int i=0;i<3;i++)
-      f[4+4*j+i] = xyz_to_rec2020[3*j+i];
+      f[4+4*i+j] = xyz_to_rec2020[3*j+i];
   }
   else
   { // p_mat == 0 (or default) rec2020, identity matrix
@@ -374,35 +423,61 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
 
 int init(dt_module_t *mod)
 {
-  // wb, matrix, uvec4 cnt, vec4 coef[22]
-  mod->committed_param_size = sizeof(float)*(4+12+4+88);
+  // wb, matrix, uvec4 cnt, vec4 coef[22], mode, gamut, exposure, sat
+  mod->committed_param_size = sizeof(float)*(4+12+4+88+2+2);
   return 0;
 }
 
-#if 0
-// params:
-// black and white points (img)
-// white balance coeffs (img)
-// colour matrix (img)
-// user defined post processing:
-// - move white point
-// - change saturation
-// - clip which gamut
-// - how much to move points with low saturation
-
-#endif
-
-
-#if 0
-// processing:
-// 1) multiply cam wb coeff or d65 wb coeff to cam rgb
-// 2) multiply cam rgb -> XYZ matrix
-// 3) keep Y channel (or X+Y+Z) for later
-// 4) apply 2d -> 2d rbf on xy:
-vec2 coef[N+2]; // RBF coefficients
-vec2 vert[N+2]; // RBF vertex position (source of vertex pairs)
-out += coef[N+0] * in; // 2x2 matrix, the
-out += coef[N+1] * in; // polynomial part
-for(int i=0;i<N;i++)
-  out += coef[i+2] * kernel(in, vert[i]);
-#endif
+void create_nodes(
+    dt_graph_t  *graph,
+    dt_module_t *module)
+{
+  int have_clut = dt_connected(module->connector+2);
+  int have_pick = dt_connected(module->connector+3);
+  assert(graph->num_nodes < graph->max_nodes);
+  const int nodeid = graph->num_nodes++;
+  graph->node[nodeid] = (dt_node_t){
+    .name   = module->name,
+    .kernel = dt_token("main"), // file name
+    .module = module,
+    .wd     = module->connector[0].roi.wd,
+    .ht     = module->connector[0].roi.ht,
+    .dp     = 1,
+    .num_connectors = 4,
+    .connector = {{
+      .name   = dt_token("input"),
+      .type   = dt_token("read"),
+      .chan   = dt_token("rgba"),
+      .format = dt_token("f16"),
+      .roi    = module->connector[0].roi,
+      .connected_mi = -1,
+    },{
+      .name   = dt_token("output"),
+      .type   = dt_token("write"),
+      .chan   = dt_token("rgba"),
+      .format = dt_token("f16"),
+      .roi    = module->connector[1].roi,
+    },{
+      .name   = dt_token("clut"),
+      .type   = dt_token("read"),
+      .chan   = dt_token("rgba"),
+      .format = dt_token("f16"),
+      .connected_mi = -1,
+    },{
+      .name   = dt_token("picked"),
+      .type   = dt_token("read"),
+      .chan   = dt_token("r"),
+      .format = dt_token("atom"),
+      .roi    = module->connector[0].roi,
+      .connected_mi = -1,
+    }},
+    .push_constant_size = 2*sizeof(uint32_t),
+    .push_constant = { have_clut, have_pick },
+  };
+  dt_connector_copy(graph, module, 0, nodeid, 0);
+  dt_connector_copy(graph, module, 1, nodeid, 1);
+  if(have_clut) dt_connector_copy(graph, module, 2, nodeid, 2);
+  else          dt_connector_copy(graph, module, 0, nodeid, 2); // dummy
+  if(have_pick) dt_connector_copy(graph, module, 3, nodeid, 3);
+  else          dt_connector_copy(graph, module, 0, nodeid, 3); // dummy
+}

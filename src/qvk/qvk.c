@@ -397,6 +397,10 @@ QVK_FEATURE_DO(inheritedQueries, 1)
       for(int k=0;k<num_ext;k++)
         if (!strcmp(ext_properties[k].extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME))
           qvk.raytracing_supported = 1;
+        else if (!strcmp(ext_properties[k].extensionName, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME))
+          qvk.float_atomics_supported = 1;
+      if(dev_properties.vendorID == 0x1002) // this is AMD
+        qvk.float_atomics_supported = 0;    // it seems they lie to us about support.
       picked_device = i;
       if(preferred_device_name)
         dt_log(s_log_qvk, "selecting device %s by explicit request", preferred_device_name);
@@ -408,8 +412,6 @@ QVK_FEATURE_DO(inheritedQueries, 1)
     dt_log(s_log_qvk|s_log_err, "could not find any suitable device!");
     return 1;
   }
-
-  dt_log(s_log_qvk, "picked device %d %s ray tracing support", picked_device, qvk.raytracing_supported ? "with" : "without");
 
   qvk.physical_device = devices[picked_device];
 
@@ -452,9 +454,8 @@ QVK_FEATURE_DO(inheritedQueries, 1)
     .queueFamilyIndex = queue_family_index,
   };
 
-  // ray tracing
   VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_structure_features = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+    .sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
     .accelerationStructure = VK_TRUE,
   };
   VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features = {
@@ -471,20 +472,42 @@ QVK_FEATURE_DO(inheritedQueries, 1)
     .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
     .bufferDeviceAddress                       = VK_TRUE,
   };
+  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomic_features = {
+    .sType                       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+    .shaderImageFloat32Atomics   = VK_TRUE,
+    .shaderImageFloat32AtomicAdd = VK_TRUE,
+    .pNext                       = &v12f,
+  };
   VkPhysicalDeviceVulkan11Features v11f = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-    .pNext = &v12f,
+    .sType                  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    .samplerYcbcrConversion = 1,
+    .pNext                  = &atomic_features,
   };
   VkPhysicalDeviceFeatures2 device_features = {
-    .pNext    = &v11f,
     .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
     .features = dev_features,
+    .pNext    = &v11f,
   };
   vkGetPhysicalDeviceFeatures2(qvk.physical_device, &device_features);
-  v11f.samplerYcbcrConversion = 1;
+  VkPhysicalDeviceFeatures2 *tmp = &device_features;
+  while(tmp)
+  { // now find out whether we *really* support 32-bit floating point atomic adds:
+    if(tmp->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT)
+    {
+      VkPhysicalDeviceShaderAtomicFloatFeaturesEXT *af =
+        (VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*)tmp;
+      if(af->shaderImageFloat32AtomicAdd == VK_FALSE)
+        qvk.float_atomics_supported = 0;
+    }
+    tmp = tmp->pNext;
+  }
 
-  const char *vk_requested_device_extensions[] = {
-#if 1 // ray tracing
+  dt_log(s_log_qvk, "picked device %d %s ray tracing and %s float atomics support", picked_device,
+      qvk.raytracing_supported ? "with" : "without",
+      qvk.float_atomics_supported ? "with" : "without");
+
+  const char *requested_device_extensions[30] = {
+    // ray tracing
     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
     VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, // intel doesn't have it pre 2015 (hd 520)
@@ -492,22 +515,23 @@ QVK_FEATURE_DO(inheritedQueries, 1)
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
     VK_KHR_RAY_QUERY_EXTENSION_NAME,
-#endif
+    // end of ray tracing
     // VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, // ballot voting in work group
-#ifdef QVK_ENABLE_VALIDATION
-    VK_EXT_DEBUG_MARKER_EXTENSION_NAME,
-#endif
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME, // goes last because we might not want it without gui
   };
+  int len = (qvk.raytracing_supported ? 7 : 0);
+  if(qvk.float_atomics_supported) requested_device_extensions[len++] = VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME;
+#ifdef QVK_ENABLE_VALIDATION
+  requested_device_extensions[len++] = VK_EXT_DEBUG_MARKER_EXTENSION_NAME;
+#endif
+  if(qvk.window) requested_device_extensions[len++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
-  const int len = LENGTH(vk_requested_device_extensions) - (qvk.window ? 0 : 1) - (qvk.raytracing_supported ? 0 : 7);
   VkDeviceCreateInfo dev_create_info = {
     .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
     .pNext                   = &device_features,
     .pQueueCreateInfos       = &queue_create_info,
     .queueCreateInfoCount    = 1,
     .enabledExtensionCount   = len,
-    .ppEnabledExtensionNames = vk_requested_device_extensions + (qvk.raytracing_supported ? 0 : 7),
+    .ppEnabledExtensionNames = requested_device_extensions,
   };
 
   /* create device and queue */

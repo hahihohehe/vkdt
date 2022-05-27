@@ -24,8 +24,9 @@ read_header(
 
   char filename[PATH_MAX];
   char *key[] = {
-    "model", 0};
+    "maker", "model", 0};
   char *val[] = {
+    mod->graph->main_img_param.maker,
     mod->graph->main_img_param.model, 0};
   dt_strexpand(pattern, strlen(pattern), filename, sizeof(filename), key, val);
   // fprintf(stderr, "[i-lut] loading %s\n", filename);
@@ -66,7 +67,7 @@ read_plain(
     uint16_t       *out)
 {
   fseek(lut->f, lut->data_begin, SEEK_SET);
-  size_t sz = lut->header.datatype == 0 ? sizeof(uint16_t) : sizeof(float);
+  size_t sz = lut->header.datatype == dt_lut_header_f16 ? sizeof(uint16_t) : sizeof(float);
   fread(out, lut->header.wd*lut->header.ht*lut->header.channels, sz, lut->f);
   return 0;
 }

@@ -2,16 +2,27 @@
 #extension GL_GOOGLE_include_directive    : enable
 
 #include "shared.glsl"
+#include "shared/dtucs.glsl"
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
 layout(std140, set = 0, binding = 1) uniform params_t
 {
-  vec4  mul;               // camera white balance
+  vec4  mul;               // camera white balance (r,g,b, exposure)
   mat3  cam_to_rec2020;    // camera matrix
   uvec4 N;                 // number of patches < 20
   vec4  coef[22];          // xy RBF positions, zw coefs
+  float temp;              // colour temperature for wb 0:2856 1:6500
+  uint  colour_mode;       // 0-matrix 1-clut
+  float saturation;        // multiplier on chroma
+  uint  pick_mode;         // what do we do with the colour picked input?
 } params;
+
+layout(push_constant, std140) uniform push_t
+{
+  int have_clut;
+  int have_pick;
+} push;
 
 
 layout( // input
@@ -21,6 +32,44 @@ layout( // input
 layout( // output
     set = 1, binding = 1
 ) uniform writeonly image2D img_out;
+
+layout( // if have_clut, the colour lookup table is here
+    set = 1, binding = 2
+) uniform sampler2D img_clut;
+
+layout( // picked colour if any.
+    set = 1, binding = 3
+) uniform sampler2D img_pick; // does this need to be a usampler on amd?
+
+vec3 // return adapted rec2020
+cat16(vec3 rec2020_d65, vec3 rec2020_src, vec3 rec2020_dst)
+{
+  // TODO: concat these with xyz/rec2020 in python and bring back the results? are constants folded enough anyways?
+  // these are the CAT16 M^{-1} and M matrices.
+  // we use the standalone adaptation as proposed in
+  // Smet and Ma, "Some concerns regarding the CAT16 chromatic adaptation transform",
+  // Color Res Appl. 2020;45:172–177.
+  // these are XYZ to cone-like
+  const mat3 M16i = transpose(mat3(
+       1.86206786, -1.01125463,  0.14918677,
+       0.38752654,  0.62144744, -0.00897398,
+      -0.01584150, -0.03412294,  1.04996444));
+  const mat3 M16 = transpose(mat3(
+       0.401288, 0.650173, -0.051461,
+      -0.250268, 1.204414,  0.045854,
+      -0.002079, 0.048952,  0.953127));
+  const mat3 rec2020_to_xyz = mat3(
+    6.36958048e-01, 2.62700212e-01, 4.20575872e-11,
+    1.44616904e-01, 6.77998072e-01, 2.80726931e-02,
+    1.68880975e-01, 5.93017165e-02, 1.06098506e+00);
+
+  const vec3 cl_src = M16 * rec2020_to_xyz * rec2020_src;
+  const vec3 cl_dst = M16 * rec2020_to_xyz * rec2020_dst;
+  vec3 cl = M16 * rec2020_to_xyz * rec2020_d65;
+  cl *= cl_dst / cl_src;
+  return inverse(rec2020_to_xyz) * M16i * cl;
+}
+
 
 float
 kernel(vec2 ci, vec2 p)
@@ -33,15 +82,70 @@ kernel(vec2 ci, vec2 p)
   return r2 * log(r2);
 }
 
+void tri2quad(inout vec2 tc)
+{
+  tc.y = tc.y / (1.0-tc.x);
+  tc.x = (1.0-tc.x)*(1.0-tc.x);
+}
+
+vec3 process_clut(vec3 rgb)
+{
+  float b = rgb.r+rgb.g+rgb.b;
+  vec2 tc = rgb.rb/b;
+  tri2quad(tc);
+  tc.x /= 3.0;
+  vec4 rbrb = vec4(texture(img_clut, tc).xy, texture(img_clut, tc+vec2(2.0/3.0, 0.0)).xy);
+  vec2 L2 = texture(img_clut, tc + vec2(1.0/3.0, 0.0)).xy;
+  float L = mix(L2.x, L2.y, params.temp);
+  vec2 rb = mix(rbrb.xy, rbrb.zw, params.temp);
+  rgb = vec3(rb.x, 1.0-rb.x-rb.y, rb.y);
+  return rgb * L * b;
+}
+
 void
 main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
 
-  // white balance + cmatrix:
-  vec3 rgb = texelFetch(img_in, ipos, 0).rgb * params.mul.rgb;
-  rgb = rgb * params.cam_to_rec2020;
+  vec3 rgb = texelFetch(img_in, ipos, 0).rgb; // read camera rgb
+  float cam_lum = 1.5;
+  vec3 picked_rgb = vec3(0.5);
+  if(push.have_pick == 1 && params.pick_mode > 0)
+  {
+    const int i = 0; // which one of the colour pickers
+    picked_rgb = vec3(
+        // do we need this on amd?
+        // uintBitsToFloat(texelFetch(img_pick, ivec2(i, 0), 0).r),
+        // uintBitsToFloat(texelFetch(img_pick, ivec2(i, 1), 0).r),
+        // uintBitsToFloat(texelFetch(img_pick, ivec2(i, 2), 0).r));
+        texelFetch(img_pick, ivec2(i, 0), 0).r,
+        texelFetch(img_pick, ivec2(i, 1), 0).r,
+        texelFetch(img_pick, ivec2(i, 2), 0).r);
+    cam_lum = dot(vec3(1), picked_rgb);
+  }
+
+  // process camera rgb to rec2020:
+  if(params.colour_mode == 0 || push.have_clut == 0)
+    rgb = params.cam_to_rec2020 * rgb;
+  else rgb = process_clut(rgb);
+
+  if(push.have_pick == 1 && (params.pick_mode & 1) != 0) // TODO: and params.pick_mode == wb
+  { // spot wb
+    if(params.colour_mode == 0 || push.have_clut == 0)
+      picked_rgb = params.cam_to_rec2020 * picked_rgb;
+    else
+      picked_rgb = process_clut(picked_rgb);
+    picked_rgb /= picked_rgb.g;
+    rgb = cat16(rgb, picked_rgb, params.mul.rgb);
+  } // regular white balancing
+  else rgb = cat16(rgb, vec3(1.0), params.mul.rgb);
+
+  if(push.have_pick == 1 && (params.pick_mode & 2) != 0)
+  { // deflicker based on input patch
+    rgb *= 1.5/cam_lum;
+  }
+  rgb *= params.mul.w; // exposure correction
 
   if(params.N.x > 0)
   {
@@ -52,7 +156,7 @@ main()
 #else // log(g/r) log(g/b)
     vec2 ci = log(rgb.g/(1e-8+rgb.rb));
 #endif
-    // now lut part:
+    // now rbf part:
     vec2 co = mat2(params.coef[params.N.x+0].zw, params.coef[params.N.x+1].zw) * ci;
     for(int i=0;i<params.N.x;i++)
       co += params.coef[i].zw * kernel(ci, params.coef[i].xy);
@@ -67,92 +171,17 @@ main()
     rgb *= b; // keep brightness constant
   }
 
+  // dt ucs saturation last so we don't mess with the rbf which is potentially
+  // used for cc24 calibration
+  if(params.saturation != 1.0)
+  { // cut a few cycles if not needed
+    vec3 xyY = rec2020_to_xyY(rgb);
+    vec3 JCH = xyY_to_dt_UCS_JCH(xyY, 1.0);
+    JCH.y = clamp(JCH.y * params.saturation, 0, 1.0);
+    xyY = dt_UCS_JCH_to_xyY(JCH, 1.0);
+    rgb = xyY_to_rec2020(xyY);
+  }
+
   imageStore(img_out, ipos, vec4(rgb, 1));
-
-#if 0 // broken colour spaces follow:
-  vec2 p = ipos / vec2(textureSize(img_in, 0));
-
-#if 1
-  // our coordinate system is (log(y/u'), log(y/v'))
-  vec2 loguv = params.scale*(-1.0 + 2.0*p);
-  const float u = params.green / exp(loguv.x);
-  const float v = params.green / exp(loguv.y);
-  // convert u' and v' to xy
-  vec3 xyz = vec3(
-  9.0*u / (6*u - 16*v + 12.0),
-  4.0*v / (6*u - 16*v + 12.0),
-  0.0);
-  xyz.z = 1.0-xyz.x-xyz.y;
-  vec2 tc = xyz.xy / dot(xyz, vec3(1.0));
-  vec3 mac = texture(img_in, tc, 0).rgb;
-  float mul = mac.x;
-  const mat3 xyz_to_rec2020 = mat3(
-      1.71665119, -0.66668435,  0.01763986,
-      -0.35567078,  1.61648124, -0.04277061,
-      -0.25336628,  0.01576855,  0.94210312);
-  // vec3 XYZ = xyz / xyz.y;
-  vec3 rgb = xyz_to_rec2020 * xyz;//XYZ;
-  if(any(lessThan(rgb, vec3(0.0))) || any(greaterThan(rgb, vec3(1.0)))) mul *= 0.2;
-#endif
-
-#if 0
-  // our coordinate system is (log(y/x), log(y/z))
-  vec2 logxz = params.scale*(-1.0 + 2.0*p);
-  vec3 xyz = vec3(
-      params.green / exp(logxz.x),
-      params.green,
-      params.green / exp(logxz.y));
-  vec2 tc = xyz.xy / dot(xyz, vec3(1.0));
-  vec3 mac = texture(img_in, tc, 0).rgb;
-  float mul = mac.x;
-  const mat3 xyz_to_rec2020 = mat3(
-      1.71665119, -0.66668435,  0.01763986,
-      -0.35567078,  1.61648124, -0.04277061,
-      -0.25336628,  0.01576855,  0.94210312);
-  // vec3 XYZ = xyz / xyz.y;
-  vec3 rgb = xyz_to_rec2020 * xyz;//XYZ;
-  if(any(lessThan(rgb, vec3(0.0))) || any(greaterThan(rgb, vec3(1.0)))) mul *= 0.2;
-#endif
-
-#if 0
-  // our coordinate system is (log(g/r), log(g/b))
-  vec2 logrb = params.scale*(-1.0 + 2.0*p);
-  // extract rec2020 rgb:
-  vec3 rgb = vec3(
-      params.green / exp(logrb.x),
-      params.green,
-      params.green / exp(logrb.y));
-  const mat3 rec2020_to_xyz = mat3(
-      6.36958048e-01, 2.62700212e-01, 4.20575872e-11,
-      1.44616904e-01, 6.77998072e-01, 2.80726931e-02,
-      1.68880975e-01, 5.93017165e-02, 1.06098506e+00);
-
-  vec3 xyz = rec2020_to_xyz * rgb;
-  vec2 tc = xyz.xy / dot(xyz, vec3(1.0));
-
-  vec3 mac = texture(img_in, tc, 0).rgb;
-
-  float mul = 1.0;
-  // if(any(lessThan(rgb, vec3(0.0))) || any(greaterThan(rgb, vec3(1.0)))) mul = 0.1;
-  if(mac.x <= 0.0) mul *= mac.x;
-
-  // tonemap
-  // rgb /= dot(rgb, vec3(.10));
-
-#if 1 // DEBUG: in fact the gamut and xyz matrix do what we expect:
-  const mat3 xyz_to_rec2020 = mat3(
-      1.71665119, -0.66668435,  0.01763986,
-      -0.35567078,  1.61648124, -0.04277061,
-      -0.25336628,  0.01576855,  0.94210312);
-  // rgb = vec3(p, 1);
-  // vec3 XYZ = vec3(p.xy, 1.0-p.x-p.y);
-  // vec3 XYZ = vec3(tc.xy, 1.0-tc.x-tc.y);
-  vec3 XYZ = xyz / xyz.y;
-  rgb = xyz_to_rec2020 * XYZ;
-#endif
-#endif
-
-  imageStore(img_out, ivec2(ipos.x, imageSize(img_out).y-ipos.y-1), vec4(rgb * mul, 1));
-#endif
 }
 

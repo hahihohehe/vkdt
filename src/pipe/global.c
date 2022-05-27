@@ -111,6 +111,7 @@ dt_module_so_load(
     mod->read_source    = dlsym(mod->dlhandle, "read_source");
     mod->read_geo       = dlsym(mod->dlhandle, "read_geo");
     mod->commit_params  = dlsym(mod->dlhandle, "commit_params");
+    mod->ui_callback    = dlsym(mod->dlhandle, "ui_callback");
     mod->check_params   = dlsym(mod->dlhandle, "check_params");
     mod->audio          = dlsym(mod->dlhandle, "audio");
     mod->input          = dlsym(mod->dlhandle, "input");
@@ -217,6 +218,7 @@ dt_module_so_load(
       else if(type == dt_token("pick"))    {}
       else if(type == dt_token("print"))   {}
       else if(type == dt_token("rbmap"))   {}
+      else if(type == dt_token("callback")){}
       else dt_log(s_log_err, "unknown widget type %"PRItkn" in %s!", dt_token_str(type), filename);
       int pid = dt_module_get_param(mod, parm);
       if(pid == -1)
@@ -263,9 +265,9 @@ dt_module_so_load(
         if(mod->param[i]->name == pn)
         {
           size_t len = strnlen(b, sizeof(line)-9); // remove max token + :
-          char *copy = malloc(sizeof(char) * len);
+          char *copy = malloc(sizeof(char) * (len+1));
           strncpy(copy, b, len);
-          copy[len-1] = 0; // make sure it's terminated even upon truncation
+          copy[len] = 0; // make sure it's terminated even upon truncation
           mod->param[i]->tooltip = copy;
           break;
         }
@@ -301,6 +303,35 @@ dt_module_so_load(
     fclose(f);
   }
 
+  // read extracted connector tooltips
+  snprintf(filename, sizeof(filename), "%s/modules/%s/ctooltips", dt_pipe.basedir, dirname);
+  f = fopen(filename, "rb");
+  for(int i=0;i<mod->num_connectors;i++) mod->connector[i].tooltip = 0; // de-init
+  if(f)
+  {
+    while(!feof(f))
+    {
+      char *b = line;
+      fscanf(f, "%[^\n]", line);
+      if(fgetc(f) == EOF) break; // read \n
+      dt_token_t cn = dt_read_token(b, &b);
+      for(int i=0;i<mod->num_connectors;i++)
+      {
+        if(mod->connector[i].name == cn)
+        {
+          size_t len = strnlen(b, sizeof(line)-9); // remove max token + :
+          char *copy = malloc(sizeof(char) * (len+1));
+          strncpy(copy, b, len);
+          copy[len] = 0; // make sure it's terminated even upon truncation
+          mod->connector[i].tooltip = copy;
+          break;
+        }
+      }
+    }
+    fclose(f);
+  }
+
+
   // TODO: more sanity checks?
 
   // dt_log(s_log_pipe, "[module so load] loading %s", dirname);
@@ -316,6 +347,8 @@ dt_module_so_unload(dt_module_so_t *mod)
     free((char *)mod->param[i]->tooltip);
     free(mod->param[i]);
   }
+  for(int i=0;i<mod->num_connectors;i++)
+    free((char *)mod->connector[i].tooltip);
   // decrements ref count and unloads the dso if it drops to 0
   if(mod->dlhandle)
     dlclose(mod->dlhandle);

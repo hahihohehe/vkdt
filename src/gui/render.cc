@@ -603,7 +603,7 @@ void render_lighttable_right_panel(double &hotkey_time)
   // if (no_nav)             window_flags |= ImGuiWindowFlags_NoNav;
   // if (no_background)      window_flags |= ImGuiWindowFlags_NoBackground;
   // if (no_bring_to_front)  window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
-  ImGui::SetNextWindowPos (ImVec2(qvk.win_width - vkdt.state.panel_wd, 0),    ImGuiCond_Always);
+  ImGui::SetNextWindowPos (ImVec2(qvk.win_width - vkdt.state.panel_wd, 0),   ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(vkdt.state.panel_wd, vkdt.state.panel_ht), ImGuiCond_Always);
   ImGui::Begin("panel-right", 0, window_flags);
 
@@ -672,7 +672,21 @@ dont_update_time:;
     }
 
     if(ImGui::Button("open directory", size))
+    {
+      const char *mru = dt_rc_get(&vkdt.rc, "gui/ruc_entry00", "null");
+      if(strcmp(mru, "null"))
+      {
+        snprintf(filebrowser.cwd, sizeof(filebrowser.cwd), "%s", mru);
+        char *c = filebrowser.cwd + strlen(filebrowser.cwd) - 1;
+        for(;*c!='/'&&c>filebrowser.cwd;c--);
+        if(c > filebrowser.cwd) strcpy(c, "/"); // truncate at last '/' to remove subdir
+        struct stat statbuf;
+        int ret = stat(filebrowser.cwd, &statbuf);
+        if(ret || (statbuf.st_mode & S_IFMT) != S_IFDIR) // don't point to non existing/non directory
+          strcpy(filebrowser.cwd, "/");
+      }
       dt_filebrowser_open(&filebrowser);
+    }
 
     if(dt_filebrowser_display(&filebrowser, 'd'))
     { // "ok" pressed
@@ -725,6 +739,20 @@ dont_update_time:;
     }
     ImGui::Unindent();
   } // end collapsing header "recent tags"
+
+  if(ImGui::CollapsingHeader("recent collections"))
+  { // recently used collections in ringbuffer:
+    int32_t num = CLAMP(dt_rc_get_int(&vkdt.rc, "gui/ruc_num", 0), 0, 10);
+    for(int i=0;i<num;i++)
+    {
+      char entry[512];
+      snprintf(entry, sizeof(entry), "gui/ruc_entry%02d", i);
+      const char *dir = dt_rc_get(&vkdt.rc, entry, "null");
+      if(strcmp(dir, "null"))
+        if(ImGui::Button(dir))
+          dt_gui_switch_collection(dir);
+    }
+  } // end collapsing header "recent collections"
 
   if(vkdt.db.selection_cnt > 0 && ImGui::CollapsingHeader("selected images"))
   {
@@ -1128,7 +1156,12 @@ uint64_t render_module(dt_graph_t *graph, dt_module_t *module, int connected)
           con[j] = k;
           if(mod[1-j] >= 0 && con[1-j] >= 0)
           {
-            cerr = dt_module_connect(graph, mod[0], con[0], mod[1], con[1]);
+            // if already connected disconnect
+            if(vkdt.graph_dev.module[mod[1]].connector[con[1]].connected_mc == con[0] &&
+               vkdt.graph_dev.module[mod[1]].connector[con[1]].connected_mi == mod[0])
+              cerr = dt_module_connect(graph, -1, -1, mod[1], con[1]);
+            else
+              cerr = dt_module_connect(graph, mod[0], con[0], mod[1], con[1]);
             if(cerr) err = (1ul<<32) | cerr;
             else vkdt.graph_dev.runflags = s_graph_run_all;
             con[0] = con[1] = mod[0] = mod[1] = -1;
@@ -1136,9 +1169,17 @@ uint64_t render_module(dt_graph_t *graph, dt_module_t *module, int connected)
         }
       }
       if(ImGui::IsItemHovered())
-        ImGui::SetTooltip("click to connect, format: %" PRItkn ":%" PRItkn,
-            dt_token_str(module->connector[k].chan),
-            dt_token_str(module->connector[k].format));
+      {
+          ImGui::BeginTooltip();
+          ImGui::PushTextWrapPos(vkdt.state.panel_wd);
+          ImGui::Text("click to connect, format: %" PRItkn ":%" PRItkn,
+              dt_token_str(module->connector[k].chan),
+              dt_token_str(module->connector[k].format));
+          if(module->connector[k].tooltip)
+            ImGui::TextUnformatted(module->connector[k].tooltip);
+          ImGui::PopTextWrapPos();
+          ImGui::EndTooltip();
+      }
       if(selected)
         ImGui::PopStyleColor(3);
     }
@@ -1222,6 +1263,15 @@ inline void draw_widget(int modid, int parid)
       keyframe_time = now; \
     }\
   }
+#define TOOLTIP \
+  if(param->tooltip && ImGui::IsItemHovered())\
+  {\
+    ImGui::BeginTooltip();\
+    ImGui::PushTextWrapPos(vkdt.state.panel_wd);\
+    ImGui::TextUnformatted(param->tooltip);\
+    ImGui::PopTextWrapPos();\
+    ImGui::EndTooltip();\
+  }
 
   // distinguish by count:
   // get count by param cnt or explicit multiplicity from ui file
@@ -1257,14 +1307,7 @@ inline void draw_widget(int modid, int parid)
           vkdt.graph_dev.active_module = modid;
         }
         KEYFRAME
-        if(param->tooltip && ImGui::IsItemHovered())
-        {
-          ImGui::BeginTooltip();
-          ImGui::PushTextWrapPos(vkdt.state.panel_wd);
-          ImGui::TextUnformatted(param->tooltip);
-          ImGui::PopTextWrapPos();
-          ImGui::EndTooltip();
-        }
+        TOOLTIP
       }
       else if(param->type == dt_token("int"))
       {
@@ -1281,6 +1324,7 @@ inline void draw_widget(int modid, int parid)
               flags | s_graph_run_record_cmd_buf | s_graph_run_wait_done);
           vkdt.graph_dev.active_module = modid;
         }
+        TOOLTIP
       }
       break;
     }
@@ -1317,8 +1361,30 @@ inline void draw_widget(int modid, int parid)
       }
       break;
     }
+    case dt_token("callback"):
+    { // special callback button
+      if(num == 0)
+      {
+        char str[10] = {0};
+        memcpy(str, &param->name, 8);
+        ImVec2 size(0.5*vkdt.state.panel_wd, 0);
+        if(ImGui::Button(str, size))
+        {
+          dt_module_t *m = vkdt.graph_dev.module+modid;
+          if(m->so->ui_callback) m->so->ui_callback(m, param->name);
+        }
+        TOOLTIP
+        if(param->type == dt_token("string"))
+        {
+          ImGui::SameLine();
+          char *v = (char *)(vkdt.graph_dev.module[modid].param + param->offset);
+          ImGui::InputText("", v, count);
+        }
+      }
+      break;
+    }
     case dt_token("combo"):
-    {
+    { // combo box
       if(param->type == dt_token("int"))
       {
         int32_t *val = (int32_t*)(vkdt.graph_dev.module[modid].param + param->offset) + num;
@@ -1335,6 +1401,7 @@ inline void draw_widget(int modid, int parid)
           vkdt.graph_dev.active_module = modid;
           g_busy += 2;
         }
+        TOOLTIP
       }
       break;
     }
@@ -1346,6 +1413,7 @@ inline void draw_widget(int modid, int parid)
       ImVec4 col(val[0], val[1], val[2], 1.0f);
       ImVec2 size(0.1*vkdt.state.panel_wd, 0.1*vkdt.state.panel_wd);
       ImGui::ColorButton(str, col, ImGuiColorEditFlags_HDR, size);
+      TOOLTIP
       if((num < count - 1) && ((num % 6) != 5))
         ImGui::SameLine();
       break;
@@ -1409,6 +1477,7 @@ inline void draw_widget(int modid, int parid)
           vkdt.graph_dev.runflags = s_graph_run_all;
           darkroom_reset_zoom();
         }
+        TOOLTIP
       }
       num = count;
       break;
@@ -1502,6 +1571,7 @@ inline void draw_widget(int modid, int parid)
           darkroom_reset_zoom();
         }
         KEYFRAME
+        TOOLTIP
       }
       num = count;
       break;
@@ -1531,6 +1601,7 @@ inline void draw_widget(int modid, int parid)
           // copy to quad state
           memcpy(vkdt.wstate.state, v, sz);
         }
+        TOOLTIP
       }
       if((num < count - 1) && ((num % 6) != 5))
         ImGui::SameLine();
@@ -1647,6 +1718,7 @@ inline void draw_widget(int modid, int parid)
             if(mod->so->input) mod->so->input(mod, &p);
         }
         KEYFRAME
+        TOOLTIP
       }
       break;
     }
@@ -1714,6 +1786,8 @@ inline void draw_widget(int modid, int parid)
     }
     case dt_token("rgb"):
     {
+      float *col = (float*)(vkdt.graph_dev.module[modid].param + param->offset) + 3*num;
+      ImGui::PushStyleColor(ImGuiCol_FrameBg, gamma(ImVec4(col[0], col[1], col[2], 1.0)));
       for(int comp=0;comp<3;comp++)
       {
         float *val = (float*)(vkdt.graph_dev.module[modid].param + param->offset) + 3*num + comp;
@@ -1734,7 +1808,9 @@ inline void draw_widget(int modid, int parid)
           vkdt.graph_dev.active_module = modid;
         }
         KEYFRAME
+        TOOLTIP
       }
+      ImGui::PopStyleColor();
       if(param->cnt == count && count <= 4) num = 4; // non-array rgb controls
       break;
     }
@@ -1750,6 +1826,8 @@ inline void draw_widget(int modid, int parid)
   ImGui::PopID();
   } // end for multiple widgets
 #undef RESETBLOCK
+#undef KEYFRAME
+#undef TOOLTIP
 }
 } // anonymous namespace
 
@@ -2256,25 +2334,25 @@ abort:
       {
         if(ip->exposure >= 1.0f)
           if(nearbyintf(ip->exposure) == ip->exposure)
-            ImGui::Text("%s %.0f″ f/%.1f %dmm ISO %d", ip->model, ip->exposure, ip->aperture,
+            ImGui::Text("%s %s %.0f″ f/%.1f %dmm ISO %d", ip->maker, ip->model, ip->exposure, ip->aperture,
                 (int)ip->focal_length, (int)ip->iso);
           else
-            ImGui::Text("%s %.1f″ f/%.1f %dmm ISO %d", ip->model, ip->exposure, ip->aperture,
+            ImGui::Text("%s %s %.1f″ f/%.1f %dmm ISO %d", ip->maker, ip->model, ip->exposure, ip->aperture,
                 (int)ip->focal_length, (int)ip->iso);
         /* want to catch everything below 0.3 seconds */
         else if(ip->exposure < 0.29f)
-          ImGui::Text("%s 1/%.0f f/%.1f %dmm ISO %d", ip->model, 1.0 / ip->exposure, ip->aperture,
+          ImGui::Text("%s %s 1/%.0f f/%.1f %dmm ISO %d", ip->maker, ip->model, 1.0 / ip->exposure, ip->aperture,
               (int)ip->focal_length, (int)ip->iso);
         /* catch 1/2, 1/3 */
         else if(nearbyintf(1.0f / ip->exposure) == 1.0f / ip->exposure)
-          ImGui::Text("%s 1/%.0f f/%.1f %dmm ISO %d", ip->model, 1.0 / ip->exposure, ip->aperture,
+          ImGui::Text("%s %s 1/%.0f f/%.1f %dmm ISO %d", ip->maker, ip->model, 1.0 / ip->exposure, ip->aperture,
               (int)ip->focal_length, (int)ip->iso);
         /* catch 1/1.3, 1/1.6, etc. */
         else if(10 * nearbyintf(10.0f / ip->exposure) == nearbyintf(100.0f / ip->exposure))
-          ImGui::Text("%s 1/%.1f f/%.1f %dmm ISO %d", ip->model, 1.0 / ip->exposure, ip->aperture,
+          ImGui::Text("%s %s 1/%.1f f/%.1f %dmm ISO %d", ip->maker, ip->model, 1.0 / ip->exposure, ip->aperture,
               (int)ip->focal_length, (int)ip->iso);
         else
-          ImGui::Text("%s %.1f″ f/%.1f %dmm ISO %d", ip->model, ip->exposure, ip->aperture,
+          ImGui::Text("%s %s %.1f″ f/%.1f %dmm ISO %d", ip->maker, ip->model, ip->exposure, ip->aperture,
               (int)ip->focal_length, (int)ip->iso);
       }
     }
