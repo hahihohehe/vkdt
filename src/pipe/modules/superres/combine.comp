@@ -120,14 +120,14 @@ main()
         // acc += weight * intensity * color_vec(sourcepos);
         // wsum += 0.1 * weight * color_vec(sourcepos);
         acc += weight * intensity * color_vec(sourcepos);
-        wsum += 0.1 * weight * color_vec(sourcepos);
+        wsum += weight * color_vec(sourcepos);
       }
     }
   }
 
 
-  // imageStore(acc_out, ipos, acc + acc_old);
-  // imageStore(cont_out, ipos, wsum + wsum_old);
-  imageStore(acc_out, ipos, acc_old);
-  imageStore(cont_out, ipos, wsum_old);
+  imageStore(acc_out, ipos, acc + acc_old);
+  imageStore(cont_out, ipos, wsum + wsum_old);
+  // imageStore(acc_out, ipos, acc_old);
+  // imageStore(cont_out, ipos, wsum_old);
 }

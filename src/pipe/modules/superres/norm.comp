@@ -39,7 +39,8 @@ main()
     weight.g = 1;
   if (weight.b == 0.0)
     weight.b = 1;
-  weight *= 10;
+  //weight.g *= 2;
+  // weight *= 10;
   col /= weight;
   col.a = 1.0;
   imageStore(img_out, ipos, col);

@@ -1,4 +1,4 @@
-ref:read:rggb:*
+input:read:rggb:*
 input1:read:rggb:*
 mv1:read:rg:f16
 mask1:read:y:f16
