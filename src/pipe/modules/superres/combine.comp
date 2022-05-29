@@ -9,8 +9,13 @@ layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_siz
 layout(push_constant, std140) uniform push_t
 {
   uint filters;
-  uint offset_scale;
 } push;
+
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+} params;
 
 layout( // input rggb original
     set = 1, binding = 0
@@ -90,8 +95,10 @@ main()
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
   // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
-  vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
+  // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
+  vec2 epos = ipos + texelFetch(off, ipos, 0).xy;   // effective position
   // vec2 epos = ipos + o;
+  // vec2 epos = ipos;
   ivec2 scent = ivec2(epos);    // sample center: sample around epos rounded down
 
   // TODO: support rgb and xtrans input
@@ -101,8 +108,8 @@ main()
   vec4 acc = vec4(0, 0, 0, 0);
   vec4 wsum = vec4(0, 0, 0, 0);
 
-  float cert = texelFetch(mask, ipos / 2, 0).r;
-  if (true || cert > .6)
+  float mask = texelFetch(mask, ipos / 2, 0).r;
+  if (mask < params.cert)
   {
     for (int i = -SSIZE; i <= SSIZE; i++)
     {
@@ -120,14 +127,24 @@ main()
         // acc += weight * intensity * color_vec(sourcepos);
         // wsum += 0.1 * weight * color_vec(sourcepos);
         acc += weight * intensity * color_vec(sourcepos);
+        // acc += vec4(1, 0, 0, 0);
+        // wsum += vec4(1, 0, 0, 0);
         wsum += weight * color_vec(sourcepos);
       }
     }
+    // wsum += vec4(.1, .1, .1, 0);
+    // acc = vec4(mask, mask, mask, 1);
+    // wsum = vec4(1, 1, 1, 1);
   }
+
+  // acc = .2 * vec4(mask, mask, mask, 5);
+  // wsum = vec4(1, 1, 1, 1);
 
 
   imageStore(acc_out, ipos, acc + acc_old);
   imageStore(cont_out, ipos, wsum + wsum_old);
   // imageStore(acc_out, ipos, acc_old);
   // imageStore(cont_out, ipos, wsum_old);
+  // imageStore(acc_out, ipos, acc);
+  // imageStore(cont_out, ipos, wsum);
 }

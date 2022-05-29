@@ -44,5 +44,10 @@ main()
   col /= weight;
   col.a = 1.0;
   imageStore(img_out, ipos, col);
-  // imageStore(img_out, ipos, weight);
+
+  // To debug mask
+  /*weight.g *= .5;
+  weight *= .025;
+  weight.a = 1;
+  imageStore(img_out, ipos, weight);*/
 }

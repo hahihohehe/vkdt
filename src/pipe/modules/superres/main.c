@@ -30,12 +30,19 @@ void modify_roi_out(
     ro->full_ht = ri->full_ht;
 }
 
+dt_graph_run_t
+check_params(
+        dt_module_t *module,
+        uint32_t     parid,
+        void        *oldval)
+{
+    return s_graph_run_all; // maybe that fixes the redrawing bug?
+}
+
 void
 create_nodes(
         dt_graph_t  *graph,
         dt_module_t *module) {
-    float scale_offset = *dt_module_param_float(module, 0);
-
     assert(graph->num_nodes < graph->max_nodes);
     const int id_cf = graph->num_nodes++;
     dt_node_t *node_cf = graph->node + id_cf;
@@ -161,10 +168,9 @@ create_nodes(
                                           .format = dt_token("f16"),
                                           .roi    = module->connector[0].roi,
                                   }},
-                    .push_constant_size = sizeof(uint32_t) + sizeof(float),
+                    .push_constant_size = sizeof(uint32_t),
                     .push_constant = {
                             module->img_param.filters,
-                            100 * scale_offset,
                     },
             };
 
