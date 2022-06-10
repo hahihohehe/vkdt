@@ -11,6 +11,13 @@ layout(push_constant, std140) uniform push_t
   uint filters;
 } push;
 
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+  float inc;
+} params;
+
 layout( // input rggb original
     set = 1, binding = 0
 ) uniform sampler2D img;
@@ -71,6 +78,9 @@ main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
+  float res = params.inc + 1.0;
+
+  vec2 epos = vec2(ipos) / res;
 
 
   // TODO: support rgb and xtrans input
@@ -83,11 +93,11 @@ main()
       // TODO: include gradients
       float weight;
       vec4 cov = vec4(1, 1, 1, 0);  // needs to be replaced according to estimated gradients
-      ivec2 sourcepos = ivec2(ipos) + ivec2(i, j);    // position of sample
-      vec2 actualsourcepos = sourcepos;   // only because offset is 0
+      ivec2 sourcepos = ivec2(epos) + ivec2(i, j);    // position of sample
+      vec2 actualsourcepos = ivec2(epos) + ivec2(i, j);   // only because offset is 0
       if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
       if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-      eval_gauss(cov, actualsourcepos - ipos, weight);
+      eval_gauss(cov, actualsourcepos - epos, weight);
       float intensity = texelFetch(img, sourcepos, 0).r;
       // acc += weight * intensity * color_vec(sourcepos);
       // wsum += 0.1 * weight * color_vec(sourcepos);

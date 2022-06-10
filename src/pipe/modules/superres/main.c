@@ -25,9 +25,11 @@ void modify_roi_out(
     dt_roi_t *ri = &module->connector[0].roi;
     dt_roi_t *ro = &module->connector[10].roi;
 
-    // always give full size and negotiate half or not in modify_roi_in
-    ro->full_wd = ri->full_wd;
-    ro->full_ht = ri->full_ht;
+    // get size specified in params
+    float res = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("inc")))[0];
+    res += 1.0f;
+    ro->full_ht = res * (float) ri->full_ht;
+    ro->full_wd = res * (float) ri->full_wd;
 }
 
 dt_graph_run_t
@@ -43,6 +45,9 @@ void
 create_nodes(
         dt_graph_t  *graph,
         dt_module_t *module) {
+    dt_roi_t *ri = &module->connector[0].roi;
+    dt_roi_t *ro = &module->connector[10].roi;
+
     assert(graph->num_nodes < graph->max_nodes);
     const int id_cf = graph->num_nodes++;
     dt_node_t *node_cf = graph->node + id_cf;
@@ -50,8 +55,8 @@ create_nodes(
             .name   = dt_token("superres"),
             .kernel = dt_token("cf"),
             .module = module,
-            .wd     = module->connector[0].roi.wd,
-            .ht     = module->connector[0].roi.ht,
+            .wd     = ro->wd,
+            .ht     = ro->ht,
             .dp     = 1,
             .num_connectors = 4,
             .connector = {{
@@ -59,7 +64,7 @@ create_nodes(
                                   .type   = dt_token("read"),
                                   .chan   = dt_token("rggb"),
                                   .format = dt_token("*"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ri,
                                   .connected_mi = -1,
                           },
                           /*{
@@ -75,14 +80,14 @@ create_nodes(
                                   .type   = dt_token("write"),
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ro,
                           },
                           {
                                   .name   = dt_token("cont"),
                                   .type   = dt_token("write"),
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ro,
                           }},
             .push_constant_size = sizeof(uint32_t),
             .push_constant = {
@@ -99,14 +104,15 @@ create_nodes(
         if(module->connector[1+3*i].connected_mi >= 0 &&
            module->connector[1+3*i].connected_mc >= 0)
         {
+            assert(graph->num_nodes < graph->max_nodes);
             const int id_combine = graph->num_nodes++;
             dt_node_t *node_combine = graph->node + id_combine;
             *node_combine = (dt_node_t) {
                     .name   = dt_token("superres"),
                     .kernel = dt_token("combine"),
                     .module = module,
-                    .wd     = module->connector[0].roi.wd,
-                    .ht     = module->connector[0].roi.ht,
+                    .wd     = ro->wd,
+                    .ht     = ro->ht,
                     .dp     = 1,
                     .num_connectors = 8,
                     .connector = {{
@@ -114,7 +120,7 @@ create_nodes(
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("rggb"),
                                           .format = dt_token("*"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ri,
                                           .connected_mi = -1,
                                   },
                                   {
@@ -122,28 +128,28 @@ create_nodes(
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("rg"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ri,
                                           .connected_mi = -1,
                                   },{
                                           .name   = dt_token("mask"),
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("y"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ri,
                                           .connected_mi = -1,
                                   },{
                                           .name   = dt_token("acc_in"),
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("rgba"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ro,
                                           .connected_mi = -1,
                                   },{
                                           .name   = dt_token("cont_in"),
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("rgba"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ro,
                                           .connected_mi = -1,
                                   },
                                   /*{
@@ -159,14 +165,14 @@ create_nodes(
                                           .type   = dt_token("write"),
                                           .chan   = dt_token("rgba"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ro,
                                   },
                                   {
                                           .name   = dt_token("cont"),
                                           .type   = dt_token("write"),
                                           .chan   = dt_token("rgba"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ro,
                                   }},
                     .push_constant_size = sizeof(uint32_t),
                     .push_constant = {
@@ -206,8 +212,8 @@ create_nodes(
             .name   = dt_token("superres"),
             .kernel = dt_token("norm"),
             .module = module,
-            .wd     = module->connector[0].roi.wd,
-            .ht     = module->connector[0].roi.ht,
+            .wd     = ro->wd,
+            .ht     = ro->ht,
             .dp     = 1,
             .num_connectors = 3,
             .connector = {{
@@ -215,7 +221,7 @@ create_nodes(
                                   .type   = dt_token("read"),
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ro,
                                   .connected_mi = -1,
                           },
                           {
@@ -223,7 +229,7 @@ create_nodes(
                                   .type   = dt_token("read"),
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ro,
                                   .connected_mi = -1,
                           },
                           {
@@ -231,7 +237,7 @@ create_nodes(
                                   .type   = dt_token("write"),
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ro,
                           }},
             .push_constant_size = sizeof(uint32_t),
             .push_constant = {
@@ -249,7 +255,7 @@ create_nodes(
         CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 1));     // cont
     }
 
-    if (1 || module->connector[1].roi.scale == 1.0) {
+    if (1 || module->connector[10].roi.scale == 1.0) {
         // no resampling needed
 
         // connect output

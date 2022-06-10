@@ -15,6 +15,7 @@ layout(push_constant, std140) uniform push_t
 layout(std140, set = 0, binding = 1) uniform params_t
 {
   float cert;
+  float inc;
 } params;
 
 layout( // input rggb original
@@ -86,7 +87,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 2
+#define SSIZE 2   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -94,12 +95,16 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
 
+  float res = params.inc + 1.0;
+
+  ivec2 spos = ivec2(vec2(ipos) / res);
+
   // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
   // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
-  vec2 epos = ipos + texelFetch(off, ipos, 0).xy;   // effective position
+  vec2 epos = ipos / res;   // effective position
+  epos += texelFetch(off, spos, 0).xy;
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
-  ivec2 scent = ivec2(epos);    // sample center: sample around epos rounded down
 
   // TODO: support rgb and xtrans input
   vec4 acc_old = texelFetch(acc_in, ipos, 0);
@@ -108,7 +113,7 @@ main()
   vec4 acc = vec4(0, 0, 0, 0);
   vec4 wsum = vec4(0, 0, 0, 0);
 
-  float mask = texelFetch(mask, ipos / 2, 0).r;
+  float mask = texelFetch(mask, spos/2, 0).r;
   if (mask < params.cert)
   {
     for (int i = -SSIZE; i <= SSIZE; i++)
@@ -118,11 +123,11 @@ main()
         // TODO: include mask and gradients
         float weight;
         vec4 cov = vec4(1, 1, 1, 0);// needs to be replaced according to estimated gradients
-        ivec2 sourcepos = scent + ivec2(i, j);// position of sample
+        ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
         vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
         if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
         if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-        eval_gauss(cov, actualsourcepos - scent, weight);
+        eval_gauss(cov, actualsourcepos - ivec2(epos), weight);
         float intensity = texelFetch(img, sourcepos, 0).r;
         // acc += weight * intensity * color_vec(sourcepos);
         // wsum += 0.1 * weight * color_vec(sourcepos);
