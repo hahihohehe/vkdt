@@ -17,6 +17,8 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float cert;
   float inc;
   float sup;
+  float rot;
+  float ani;
 } params;
 
 layout( // input rggb original
@@ -50,6 +52,8 @@ layout( // output f16 rgb accumulation buffer
 layout( // output f16 rgb weights
 set = 1, binding = 6
 ) uniform writeonly image2D cont_out;
+
+#define M_PI 3.14159265358979
 
 // mostly copied from align/splat
 void
@@ -88,7 +92,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 2   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 3   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -123,7 +127,9 @@ main()
       {
         // TODO: include mask and gradients
         float weight;
-        vec4 cov = vec4(params.sup, params.sup, 1, 0);// needs to be replaced according to estimated gradients
+        float phi = M_PI * params.rot;
+        float afac = 1 - params.ani;
+        vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));  // needs to be replaced according to estimated gradients
         ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
         vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
         if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;

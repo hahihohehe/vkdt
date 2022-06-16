@@ -1,3 +1,5 @@
 cert:float:1:1.0
 inc:float:1:0.0
 sup:float:1:1.0
+rot:float:1:0.0
+ani:float:1:0.0
