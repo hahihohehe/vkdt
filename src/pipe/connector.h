@@ -49,7 +49,7 @@ dt_connector_format_t;
 
 // shared property of nodes and modules: how many connectors do we allocate at
 // max for each one of them:
-#define DT_MAX_CONNECTORS 30
+#define DT_MAX_CONNECTORS 34
 
 // connectors are used for modules as well as for nodes.
 // modules:

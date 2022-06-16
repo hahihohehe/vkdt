@@ -16,6 +16,7 @@ layout(std140, set = 0, binding = 1) uniform params_t
 {
   float cert;
   float inc;
+  float sup;
 } params;
 
 layout( // input rggb original
@@ -122,7 +123,7 @@ main()
       {
         // TODO: include mask and gradients
         float weight;
-        vec4 cov = vec4(.5, .5, 1, 0);// needs to be replaced according to estimated gradients
+        vec4 cov = vec4(params.sup, params.sup, 1, 0);// needs to be replaced according to estimated gradients
         ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
         vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
         if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;

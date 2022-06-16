@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define OUTPUT 31
+
 void modify_roi_in(
         dt_graph_t *graph,
         dt_module_t *module)
@@ -23,7 +25,7 @@ void modify_roi_out(
         dt_module_t *module)
 {
     dt_roi_t *ri = &module->connector[0].roi;
-    dt_roi_t *ro = &module->connector[10].roi;
+    dt_roi_t *ro = &module->connector[OUTPUT].roi;
 
     // get size specified in params
     float res = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("inc")))[0];
@@ -46,7 +48,7 @@ create_nodes(
         dt_graph_t  *graph,
         dt_module_t *module) {
     dt_roi_t *ri = &module->connector[0].roi;
-    dt_roi_t *ro = &module->connector[10].roi;
+    dt_roi_t *ro = &module->connector[OUTPUT].roi;
 
     assert(graph->num_nodes < graph->max_nodes);
     const int id_cf = graph->num_nodes++;
@@ -98,7 +100,7 @@ create_nodes(
 
     int num_connected = 0;
     int id_combine_prev;
-    for (int i = 0; i < 3; i++)     // go through each input set
+    for (int i = 0; i < 10; i++)     // go through each input set
     {
         // check if input is connected
         if(module->connector[1+3*i].connected_mi >= 0 &&
@@ -255,11 +257,11 @@ create_nodes(
         CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 1));     // cont
     }
 
-    if (1 || module->connector[10].roi.scale == 1.0) {
+    if (1 || module->connector[OUTPUT].roi.scale == 1.0) {
         // no resampling needed
 
         // connect output
-        dt_connector_copy(graph, module, 10, id_norm, 2);
+        dt_connector_copy(graph, module, OUTPUT, id_norm, 2);
     }
     else { // add resample node to graph, copy its output instead:
         assert(graph->num_nodes < graph->max_nodes);
@@ -291,6 +293,6 @@ create_nodes(
                 },
         };
         CONN(dt_node_connect(graph, id_norm, 2, id_resample, 0));
-        dt_connector_copy(graph, module, 10, id_resample, 1);
+        dt_connector_copy(graph, module, OUTPUT, id_resample, 1);
     }
 }
