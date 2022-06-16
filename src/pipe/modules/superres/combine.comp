@@ -122,10 +122,10 @@ main()
       {
         // TODO: include mask and gradients
         float weight;
-        vec4 cov = vec4(1, 1, 1, 0);// needs to be replaced according to estimated gradients
+        vec4 cov = vec4(.5, .5, 1, 0);// needs to be replaced according to estimated gradients
         ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
         vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
-        if (any(greaterThanEqual(sourcepos, imageSize(acc_out)))) continue;
+        if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
         if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
         eval_gauss(cov, actualsourcepos - ivec2(epos), weight);
         float intensity = texelFetch(img, sourcepos, 0).r;
