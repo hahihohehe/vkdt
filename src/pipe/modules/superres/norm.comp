@@ -6,6 +6,17 @@
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+  float inc;
+  float sup;
+  float rot;
+  float ani;
+  float mask;
+} params;
+
 layout(push_constant, std140) uniform push_t
 {
   uint filters;
@@ -34,16 +45,29 @@ main()
   vec4 weight = texelFetch(cont, ipos, 0);
 
   if (weight.r == 0.0)
-    weight.r = 1;
+  weight.r = 1;
   if (weight.g == 0.0)
-    weight.g = 1;
+  weight.g = 1;
   if (weight.b == 0.0)
-    weight.b = 1;
+  weight.b = 1;
+
+  // mask visualisation
+  float w = weight.r + weight.g + weight.b;
+  w /= 4.0;
+  w *= params.mask;
+  w += (1 - params.mask);
+  // vec4 col_mask = vec4(1.0 - w, w, 0, 1);
+
+  // color reconstruction
   //weight.g *= 2;
   // weight *= 10;
   col /= weight;
   col.a = 1.0;
+
+  col *= w;
+
   imageStore(img_out, ipos, col);
+
 
   // To debug mask
   /*weight.g *= .5;

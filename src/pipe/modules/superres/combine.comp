@@ -92,7 +92,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 3   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 1   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
