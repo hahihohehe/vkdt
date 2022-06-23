@@ -19,6 +19,8 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float sup;
   float rot;
   float ani;
+  float mask;
+  float off;
 } params;
 
 layout( // input rggb original
@@ -92,7 +94,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 1   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 2   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -107,7 +109,7 @@ main()
   // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
   // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
   vec2 epos = ipos / res;   // effective position
-  epos += texelFetch(off, spos, 0).xy;
+  epos += params.off * texelFetch(off, spos, 0).xy;
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
 

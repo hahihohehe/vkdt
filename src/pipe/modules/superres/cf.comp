@@ -77,7 +77,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 1
+#define SSIZE 2
 
 void
 main()
