@@ -105,7 +105,20 @@ you can also build without rawspeed if that is useful for you.
 
 
 ## faq
-* **does it work with wayland**
+* **can i load canon cr3 files?**  
+this has been confirmed to work:
+```
+cd ext/rawspeed
+git remote add cytrinox https://github.com/cytrinox/rawspeed.git
+git fetch --all
+git checkout canon_cr3
+cd ../../
+rm -rf built/ext
+cd bin
+make -j20
+```
+
+* **does it work with wayland?**  
 `vkdt` has been confirmed to run on wayland, using amd hardware.
 there are a few known quirks, such as fullscreen mode (f11) does not
 work and there were refresh issues when window focus is lost.
@@ -124,6 +137,6 @@ the shader sources (`*.{glsl,comp,vert,geom,frag,tese,tesc}`) as well as the
 `examples/` and various `test/` directories are optional and do not have to be
 copied.
 to build for generic instruction sets, be sure to edit `config.mk`, especially
-set `OPT_CFLAGS=` to `-march=generic` and whatever you require. to convince
-rawspeed to do the same, set `RAWSPEED_PACKAGE_BUILD=1`.
+set `OPT_CFLAGS=` to `-march=x86-64` (not `native`) and whatever you require.
+to convince rawspeed to do the same, set `RAWSPEED_PACKAGE_BUILD=1`.
 

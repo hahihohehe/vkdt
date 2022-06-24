@@ -11,6 +11,7 @@ layout(std140, set = 0, binding = 1) uniform params_t
   mat3  cam_to_rec2020; // camera matrix
   vec4  white;
   float split;
+  float desat;
   float sat;
   int   gamut_mode;
   int   matrix_mode;
@@ -33,9 +34,9 @@ layout( // input spec coeff lut
     set = 1, binding = 3
 ) uniform sampler2D img_abney;
 
-layout( // input chroma rb lut camera -> rec2020, if any
+layout(
     set = 1, binding = 4
-) uniform sampler2D img_chroma;
+) uniform sampler2D img_clut;
 
 // these are dumped from the lut matching utility and contain
 // xyz cmf * xyz to rec2020 matrix
@@ -92,6 +93,21 @@ vec3 fetch_coeff(vec3 rgb, out float Y)
   return texture(img_spectra, tc).rgb;
 }
 
+vec3 process_clut(vec3 rgb)
+{
+  float b = rgb.r+rgb.g+rgb.b;
+  vec2 tc = rgb.rb/b;
+  tri2quad(tc);
+  tc.x /= 3.0;
+  vec4 rbrb = vec4(texture(img_clut, tc).xy, texture(img_clut, tc+vec2(2.0/3.0, 0.0)).xy);
+  vec2 L2 = texture(img_clut, tc + vec2(1.0/3.0, 0.0)).xy;
+  float L = mix(L2.x, L2.y, params.split);
+  vec2 rb = mix(rbrb.xy, rbrb.zw, params.split);
+  rgb = vec3(rb.x, 1.0-rb.x-rb.y, rb.y);
+  return rgb * L * b;
+}
+
+
 void
 main()
 {
@@ -101,21 +117,13 @@ main()
   vec3 rgb = texelFetch(img_in, ipos, 0).rgb;
 
   // convert camera rgb to xyz:
-  if(false)//ipos.x < params.split * imageSize(img_out).x)
+  if(params.matrix_mode == 0)//ipos.x < params.split * imageSize(img_out).x)
   { // matrix
-    float b = rgb.r+rgb.g+rgb.b;
     rgb = params.cam_to_rec2020 * rgb;
-    rgb *= b / (rgb.r+rgb.g+rgb.b); // could have normalised the matrix, but now it's guaranteed to match up with the spectral lut below
   }
   else
   { // spectral lut
-    float b = rgb.r+rgb.g+rgb.b;
-    vec2 tc = rgb.rb/b;
-    tri2quad(tc);
-    vec4 rbrb = texture(img_chroma, tc);
-    vec2 rb = mix(rbrb.xy, rbrb.zw, params.split);
-    rgb = vec3(rb.x, 1.0-rb.x-rb.y, rb.y);
-    rgb *= b / (rgb.r+rgb.g+rgb.b); // see above.
+    rgb = process_clut(rgb);
   }
 
   // apply exposure correction
@@ -221,7 +229,7 @@ main()
   else
   { // split: spectral
   float Y;
-  if(params.sat != 1.0)
+  if(params.sat != 1.0 || params.gamut_mode > 0)
   { // change saturation:
 #if 1 // XXX DEBUG commented out for experiments below
     const mat3 xyz_to_rec2020 = mat3(
@@ -260,22 +268,27 @@ main()
     const ivec2 size = textureSize(img_abney, 0).xy;
     if(params.gamut_mode > 0)
     {
-      float bound = 1.0; // spectral locus
-      if(params.gamut_mode > 1)
-      {
-        vec2 max_sat = texelFetch(img_abney, ivec2(size.x-1, sl.y*size.y), 0).rg;
-        if(params.gamut_mode == 2) bound = max_sat.y; // rec2020
-        if(params.gamut_mode == 3) bound = max_sat.x; // rec709
+      float bound = 1.0;
+      if(params.gamut_mode == 1)
+      { // spectral locus
+        bound = texelFetch(img_abney, ivec2(size.x-1, sl.y*size.y), 0).r;
       }
-      // quite harsh global restriction to bounds:
-      // float f = m / bound;
-      // sl.x = bound * f / pow(pow(f, 4.0) + 1.0, 1.0/4.0);
-      if(params.sat > 1.0) // only limit artificially increased saturation:
-        m = mix(sl.x, bound, (m - sl.x)/(m - sl.x + 1.0));
-      sl.x = m;
+      else if(params.gamut_mode == 2)
+      { // rec709
+        vec2 max_sat = texelFetch(img_abney, ivec2(size.x-2, sl.y*size.y), 0).rg;
+        bound = max_sat.x;
+        sl.x *= max_sat.x / max_sat.y; // adjust lower bound to spectral locus scaled into rec709
+      }
+      else if(params.gamut_mode == 3)
+      { // rec2020
+        vec2 max_sat = texelFetch(img_abney, ivec2(size.x-1, sl.y*size.y), 0).rg;
+        bound = max_sat.x;
+        sl.x *= max_sat.x / max_sat.y; // same but rec2020
+      }
+      sl.x = mix(sl.x, bound, (m - sl.x)/(m - sl.x + 1.0));
       if(sl.x > bound) sl.x = bound; // clip to gamut
     }
-    else sl.x = clamp(m, 0.0, (size.x-2.0)/size.x); // make sure we don't hit the last column (gamut limits stored there)
+    else sl.x = clamp(m, 0.0, (size.x-3.0)/size.x); // make sure we don't hit the last column (gamut limits stored there)
     // use lambda/sat lut to get new xy chroma values
     vec2 xy = texture(img_abney, sl).rg;
 #else

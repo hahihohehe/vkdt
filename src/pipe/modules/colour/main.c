@@ -323,7 +323,8 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
   const int    p_cnt = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("cnt")))[0];
   const float *p_map = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("rbmap")));
         int    p_mat = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("matrix")))[0];
-  // const int    p_gam = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("gamut")))[0];
+  const float *p_mtx = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("mat")));
+  const int    p_gam = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("gamut")))[0];
   const int    p_mod = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("mode")))[0];
   const float  p_sat = dt_module_param_float(module, dt_module_get_param(module->so, dt_token("sat")))[0];
   const int    p_pck = dt_module_param_int  (module, dt_module_get_param(module->so, dt_token("picked")))[0];
@@ -337,9 +338,10 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
   // f[4+12+4+88+0] = 1.0f - CLAMP((p_tmp - 2856.f)/(6504.f-2856.f), 0.0f, 1.0f);
   // turingbot reverses this function to more accurately blend along CCT:
   f[4+12+4+88+0] = 1.0f - CLAMP(tanf(asinhf(46.3407f+p_tmp))+(-0.0287128f*cosf(0.000798585f*(714.855f-p_tmp)))+0.942275f, 0.0f, 1.0f);
-  i[4+12+4+88+1] = p_mat == 3 ? 1 : 0; // colour mode matrix or clut
+  i[4+12+4+88+1] = p_mat == 4 ? 1 : 0; // colour mode matrix or clut
   f[4+12+4+88+2] = p_sat;
   i[4+12+4+88+3] = p_pck;
+  i[4+12+4+88+4] = p_gam;
 
   if(p_mat == 1 && !(module->img_param.cam_to_rec2020[0] > 0)) p_mat = 0; // no matrix? default to identity
   if(p_mat == 1)
@@ -355,6 +357,20 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
       0.0176398574, -0.0427706133,  0.9421031212};
     for(int j=0;j<3;j++) for(int i=0;i<3;i++)
       f[4+4*i+j] = xyz_to_rec2020[3*j+i];
+  }
+  else if(p_mat == 3)
+  { // rec709/linear srgb
+    const float rec709_to_rec2020[] = {
+      0.62750375, 0.32927542, 0.04330267,
+      0.06910828, 0.91951917, 0.0113596,
+      0.01639406, 0.08801128, 0.89538036};
+    for(int j=0;j<3;j++) for(int i=0;i<3;i++)
+      f[4+4*i+j] = rec709_to_rec2020[3*j+i];
+  }
+  else if(p_mat == 5)
+  { // read what we have stored in params
+    for(int j=0;j<3;j++) for(int i=0;i<3;i++)
+      f[4+4*i+j] = p_mtx[3*j+i];
   }
   else
   { // p_mat == 0 (or default) rec2020, identity matrix
@@ -423,8 +439,8 @@ void commit_params(dt_graph_t *graph, dt_module_t *module)
 
 int init(dt_module_t *mod)
 {
-  // wb, matrix, uvec4 cnt, vec4 coef[22], mode, gamut, exposure, sat
-  mod->committed_param_size = sizeof(float)*(4+12+4+88+2+2);
+  // wb, matrix, uvec4 cnt, vec4 coef[22], mode, exposure, sat, pick, gamut
+  mod->committed_param_size = sizeof(float)*(4+12+4+88+5);
   return 0;
 }
 
@@ -434,6 +450,7 @@ void create_nodes(
 {
   int have_clut = dt_connected(module->connector+2);
   int have_pick = dt_connected(module->connector+3);
+  int have_abney = dt_connected(module->connector+4) && dt_connected(module->connector+5);
   assert(graph->num_nodes < graph->max_nodes);
   const int nodeid = graph->num_nodes++;
   graph->node[nodeid] = (dt_node_t){
@@ -443,7 +460,7 @@ void create_nodes(
     .wd     = module->connector[0].roi.wd,
     .ht     = module->connector[0].roi.ht,
     .dp     = 1,
-    .num_connectors = 4,
+    .num_connectors = 6,
     .connector = {{
       .name   = dt_token("input"),
       .type   = dt_token("read"),
@@ -470,14 +487,30 @@ void create_nodes(
       .format = dt_token("atom"),
       .roi    = module->connector[0].roi,
       .connected_mi = -1,
+    },{
+      .name   = dt_token("abney"),
+      .type   = dt_token("read"),
+      .chan   = dt_token("rg"),
+      .format = dt_token("f16"),
+      .connected_mi = -1,
+    },{
+      .name   = dt_token("spectra"),
+      .type   = dt_token("read"),
+      .chan   = dt_token("rgba"),
+      .format = dt_token("f16"),
+      .connected_mi = -1,
     }},
-    .push_constant_size = 2*sizeof(uint32_t),
-    .push_constant = { have_clut, have_pick },
+    .push_constant_size = 3*sizeof(uint32_t),
+    .push_constant = { have_clut, have_pick, have_abney },
   };
   dt_connector_copy(graph, module, 0, nodeid, 0);
   dt_connector_copy(graph, module, 1, nodeid, 1);
-  if(have_clut) dt_connector_copy(graph, module, 2, nodeid, 2);
-  else          dt_connector_copy(graph, module, 0, nodeid, 2); // dummy
-  if(have_pick) dt_connector_copy(graph, module, 3, nodeid, 3);
-  else          dt_connector_copy(graph, module, 0, nodeid, 3); // dummy
+  if(have_clut)  dt_connector_copy(graph, module, 2, nodeid, 2);
+  else           dt_connector_copy(graph, module, 0, nodeid, 2); // dummy
+  if(have_pick)  dt_connector_copy(graph, module, 3, nodeid, 3);
+  else           dt_connector_copy(graph, module, 0, nodeid, 3); // dummy
+  if(have_abney) dt_connector_copy(graph, module, 4, nodeid, 4);
+  else           dt_connector_copy(graph, module, 0, nodeid, 4); // dummy
+  if(have_abney) dt_connector_copy(graph, module, 5, nodeid, 5);
+  else           dt_connector_copy(graph, module, 0, nodeid, 5); // dummy
 }

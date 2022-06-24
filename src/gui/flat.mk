@@ -1,5 +1,8 @@
 GUI_O=gui/gui.o\
       gui/render.o\
+      gui/render_files.o\
+      gui/render_lighttable.o\
+      gui/render_darkroom.o\
       gui/darkroom.o\
       gui/main.o\
       gui/view.o\
@@ -11,16 +14,21 @@ GUI_O=gui/gui.o\
       ../ext/imgui/backends/imgui_impl_glfw.o
 GUI_H=gui/gui.h\
       gui/render.h\
+      gui/render_view.hh\
       gui/api.h\
       gui/api.hh\
       gui/hotkey.hh\
       gui/widget_filebrowser.hh\
       gui/widget_thumbnail.hh\
+      gui/widget_recentcollect.hh\
+      gui/widget_filteredlist.hh\
       gui/view.h\
       gui/darkroom.h\
       gui/darkroom-util.h\
       gui/lighttable.h\
-      pipe/graph-traverse.inc
+      core/fs.h\
+      pipe/graph-traverse.inc\
+      pipe/graph-history.h
 GUI_CFLAGS=$(VKDT_GLFW_CFLAGS) -I../ext/imgui -I../ext/imgui/backends/
 GUI_LDFLAGS=-ldl $(VKDT_GLFW_LDFLAGS) -lm -lstdc++
 

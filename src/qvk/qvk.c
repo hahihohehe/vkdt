@@ -93,7 +93,7 @@ vk_debug_callback(
   {
     // void *const buf[100];
     // backtrace_symbols_fd(buf, 100, 2);
-    assert(0);
+    // assert(0);
   }
 #endif
   return VK_FALSE;
@@ -132,7 +132,7 @@ VkResult
 qvk_create_swapchain()
 {
   VkSwapchainKHR old_swap_chain = qvk.swap_chain;
-  QVK(vkDeviceWaitIdle(qvk.device));
+  QVKL(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
 
   if(old_swap_chain)
     for(int i = 0; i < qvk.num_swap_chain_images; i++)
@@ -254,6 +254,8 @@ VkResult
 qvk_init(const char *preferred_device_name)
 {
   threads_mutex_init(&qvk.queue_mutex, 0);
+  threads_mutex_init(&qvk.queue_work0_mutex, 0);
+  threads_mutex_init(&qvk.queue_work1_mutex, 0);
   /* layers */
   get_vk_layer_list(&qvk.num_layers, &qvk.layers);
 
@@ -379,7 +381,7 @@ QVK_FEATURE_DO(inheritedQueries, 1)
 #define QVK_FEATURE_DO(F, R)\
     if(dev_features.F == 0 && R == 1) {\
       dev_features.F = 1;\
-      dt_log(s_log_qvk|s_log_err, "device does not support requested feature " #F ", trying anyways");}
+      dt_log(s_log_qvk, "device %d does not support requested feature " #F ", trying anyways", i);}
     QVK_FEATURE_LIST
 #undef QVK_FEATURE_DO
 #undef QVK_FEATURE_LIST
@@ -642,8 +644,10 @@ destroy_swapchain()
 int
 qvk_cleanup()
 {
-  vkDeviceWaitIdle(qvk.device);
+  QVKL(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
   threads_mutex_destroy(&qvk.queue_mutex);
+  threads_mutex_destroy(&qvk.queue_work0_mutex);
+  threads_mutex_destroy(&qvk.queue_work1_mutex);
   vkDestroySampler(qvk.device, qvk.tex_sampler, 0);
   vkDestroySampler(qvk.device, qvk.tex_sampler_nearest, 0);
   vkDestroySampler(qvk.device, qvk.tex_sampler_yuv, 0);

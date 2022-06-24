@@ -4,6 +4,7 @@
 #include "db/murmur3.h"
 #include "qvk/qvk.h"
 #include "pipe/graph-io.h"
+#include "pipe/graph-defaults.h"
 #include "pipe/graph-export.h"
 #include "pipe/modules/api.h"
 #include "pipe/dlist.h"
@@ -62,10 +63,12 @@ dt_thumbnails_init(
 
   dt_graph_init(tn->graph + 0);
   dt_graph_init(tn->graph + 1);
-  tn->graph[0].queue     = qvk.queue_work0;
-  tn->graph[0].queue_idx = qvk.queue_idx_work0;
-  tn->graph[1].queue     = qvk.queue_work1;
-  tn->graph[1].queue_idx = qvk.queue_idx_work1;
+  tn->graph[0].queue       =  qvk.queue_work0;
+  tn->graph[0].queue_idx   =  qvk.queue_idx_work0;
+  tn->graph[0].queue_mutex = &qvk.queue_work0_mutex;
+  tn->graph[1].queue       =  qvk.queue_work1;
+  tn->graph[1].queue_idx   =  qvk.queue_idx_work1;
+  tn->graph[1].queue_mutex = &qvk.queue_work1_mutex;
 
   threads_mutex_init(tn->graph_lock + 0, 0);
   threads_mutex_init(tn->graph_lock + 1, 0);
@@ -80,11 +83,11 @@ dt_thumbnails_init(
   dt_vkalloc_init(&tn->alloc, tn->thumb_max + 10, heap_size);
 
   // init lru list
-  tn->lru = tn->thumb;
+  tn->lru = tn->thumb + 1; // [0] is special: busy bee
   tn->mru = tn->thumb + tn->thumb_max-1;
-  tn->thumb[0].next = tn->thumb+1;
+  tn->thumb[1].next = tn->thumb+2;
   tn->thumb[tn->thumb_max-1].prev = tn->thumb+tn->thumb_max-2;
-  for(int k=1;k<tn->thumb_max-1;k++)
+  for(int k=2;k<tn->thumb_max-1;k++)
   {
     tn->thumb[k].next = tn->thumb+k+1;
     tn->thumb[k].prev = tn->thumb+k-1;
@@ -221,16 +224,7 @@ dt_thumbnails_cache_one(
   // use ~/.cache/vkdt/<murmur3-of-filename>.bc1 as output file name
   // if that already exists with a newer timestamp than the cfg, bail out
 
-  dt_token_t input_module = dt_token("i-raw");
-  if(len >= 9)
-  {
-    if(!strncasecmp(f2-4, ".mlv", 4))
-      input_module = dt_token("i-mlv");
-    else if(!strncasecmp(f2-4, ".pfm", 4))
-      input_module = dt_token("i-pfm");
-    else if(!strncasecmp(f2-4, ".jpg", 4))
-      input_module = dt_token("i-jpg");
-  }
+  dt_token_t input_module = dt_graph_default_input_module(filename);
   char cfgfilename[PATH_MAX+100];
   char deffilename[PATH_MAX+100];
   char bc1filename[PATH_MAX+100];
@@ -281,7 +275,7 @@ dt_thumbnails_cache_one(
   clock_t beg = clock();
   if(dt_graph_export(graph, &param) != VK_SUCCESS)
   {
-    dt_log(s_log_err, "[thm] running the thumbnail graph failed on image '%s'!", filename);
+    dt_log(s_log_db, "[thm] running the thumbnail graph failed on image '%s'!", filename);
     // mark as dead
     snprintf(cfgfilename, sizeof(cfgfilename), "%s/data/bomb.bc1", dt_pipe.basedir);
     link(cfgfilename, bc1filename);
@@ -297,8 +291,6 @@ typedef struct cache_coll_job_t
 {
   uint64_t stamp;
   threads_mutex_t mutex_storage;
-  uint32_t idx_storage;
-  uint32_t done;
   uint32_t gid;
   threads_mutex_t *mutex;
   dt_thumbnails_t *tn;
@@ -367,6 +359,7 @@ dt_thumbnails_cache_list(
   uint32_t *collection = malloc(sizeof(uint32_t) * imgid_cnt);
   memcpy(collection, imgid, sizeof(uint32_t) * imgid_cnt); // take copy because this thing changes
   cache_coll_job_t *job = malloc(sizeof(cache_coll_job_t)*DT_THUMBNAILS_THREADS);
+  int taskid = -1;
   for(int k=0;k<DT_THUMBNAILS_THREADS;k++)
   {
     if(k == 0)
@@ -391,17 +384,13 @@ dt_thumbnails_cache_list(
     };
     // we only care about internal errors. if we call with stupid values,
     // it just does nothing and returns:
-    int res = threads_task(
+    taskid = threads_task(
         imgid_cnt,
-        &job[0].idx_storage,
-        &job[0].done,
+        taskid,
         job+k,
         thread_work_coll,
         thread_free_coll);
-    assert(-1 != res);
-#ifdef NDEBUG
-    (void)res;
-#endif
+    assert(taskid != -1); // only -1 is fatal
   }
   return VK_SUCCESS;
 }
@@ -436,11 +425,11 @@ dt_thumbnails_load_list(
     const uint32_t imgid = collection[k];
     if(imgid >= db->image_cnt) break; // safety first. this probably means this job is stale! big danger!
     dt_image_t *img = db->image + imgid;
-    if(img->thumbnail == 1) continue; // known broken
     if(img->thumbnail == 0)
     { // not loaded
       char filename[1024];
       dt_db_image_path(db, imgid, filename, sizeof(filename));  
+      img->thumbnail = -1u;
       if(dt_thumbnails_load_one(tn, filename, &img->thumbnail))
         img->thumbnail = 0;
     }
@@ -493,9 +482,8 @@ dt_thumbnails_load_one(
   }
 
   dt_thumbnail_t *th = 0;
-  if(*thumb_index < 2 || *thumb_index == -1u)
-  {
-    // allocate thumbnail from lru list
+  if(*thumb_index == -1u)
+  { // allocate thumbnail from lru list
     // threads_mutex_lock(&tn->lru_lock);
     th = tn->lru;
     tn->lru = tn->lru->next;             // move head

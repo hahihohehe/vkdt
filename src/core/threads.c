@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sched.h>
+#include <time.h>
 #include <pthread.h>
 
 threads_t thr;
@@ -30,14 +31,14 @@ threads_task_state_t;
 // task to work on, task:thread is 1:1
 typedef struct threads_task_t
 {
-  uint32_t       work_item_storage; // optional data backing for work_item, if no sync is needed (to avoid further alloc)
-  uint32_t      *work_item;         // pointing to an atomically increased synchronising work item counter
-  uint32_t       work_item_cnt;     // global number of work items. externally set to 0 if abortion is triggered.
-  uint32_t      *done;              // counting how many tasks are *done* (not just *picked*), to coordinate cleanup.
-  uint32_t       tid;               // id of thread working on this task, or -1u if not assigned yet
-  threads_run_t  run;               // work function
-  void          *data;              // user data to be passed to run function
-  threads_free_t free;              // optionally clean up user data
+  atomic_uint     work_item;     // work item counter (if not referring to another task)
+  atomic_uint     done;          // counting how many tasks are *done* (not just *picked*), to coordinate cleanup.
+  uint32_t        work_item_cnt; // global number of work items. externally set to 0 if abortion is triggered.
+  uint32_t        tid;           // id of thread working on this task, or -1u if not assigned yet
+  int32_t         reftask;       // use the atomics of this task (can be us)
+  threads_run_t   run;           // work function
+  void           *data;          // user data to be passed to run function
+  threads_free_t  free;          // optionally clean up user data
 }
 threads_task_t;
 
@@ -54,6 +55,8 @@ typedef struct threads_t
   threads_task_t *task;
   pthread_cond_t  cond_task_done;
   pthread_cond_t  cond_task_push;
+  pthread_mutex_t mutex_done;
+  pthread_mutex_t mutex_push;
 }
 threads_t;
 
@@ -72,14 +75,11 @@ void *threads_work(void *arg)
   sched_setaffinity(0, sizeof(cpu_set_t), &set);
 #endif
 
-  pthread_mutex_t mutex;
-  pthread_mutex_init(&mutex, 0);
-
   while(1)
   {
-    pthread_mutex_lock(&mutex);
-    pthread_cond_wait(&thr.cond_task_push, &mutex);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&thr.mutex_push);
+    pthread_cond_wait(&thr.cond_task_push, &thr.mutex_push);
+    pthread_mutex_unlock(&thr.mutex_push);
     if(thr.shutdown) break;
     threads_task_t *task = 0;
     for(int k=0;k<thr.task_max;k++)
@@ -92,10 +92,10 @@ void *threads_work(void *arg)
     if(task == 0) continue; // wait for a bit more
     while(1)
     { // work on this task
-      uint32_t item = __sync_fetch_and_add(task->work_item, 1);
+      uint32_t item = thr.task[task->reftask].work_item++;
       if(item >= task->work_item_cnt) break;
       task->run(item, task->data);
-      __sync_fetch_and_add(task->done, 1);
+      thr.task[task->reftask].done++;
       if(thr.shutdown) break;
     }
     if(thr.shutdown) break; // don't recycle task. in fact don't clean up and leak whatever we still have (better than lockup)
@@ -104,12 +104,14 @@ void *threads_work(void *arg)
       // if we knew how many threads are working on this, we could test
       // the every-increasing work_item for > work_item_cnt + num_threads
       // and avoid the done pointer.
-      while(!thr.shutdown && (*(task->done) < task->work_item_cnt)) sched_yield();
+      while(!thr.shutdown && (thr.task[task->reftask].done < task->work_item_cnt)) sched_yield();
       if(thr.shutdown) break; // don't clean up, we didn't wait for everybody!
       task->free(task->data); // every thread gets the callback, they coordinate who cleans task->data
     }
     // signal everybody that we're done with the task
+    pthread_mutex_lock(&thr.mutex_done);
     pthread_cond_broadcast(&thr.cond_task_done);
+    pthread_mutex_unlock(&thr.mutex_done);
     // mark task as recyclable:
     uint32_t oldval = __sync_val_compare_and_swap(&task->tid, tid, s_task_state_recycle);
     assert(oldval == tid); // this should never fail, people shall not mess with our task
@@ -117,8 +119,6 @@ void *threads_work(void *arg)
     (void)oldval;
 #endif
   }
-  // cleanup
-  pthread_mutex_destroy(&mutex);
   return 0;
 }
 
@@ -129,6 +129,8 @@ void threads_global_cleanup()
     pthread_join(thr.worker[i], 0);
   pthread_cond_destroy(&thr.cond_task_done);
   pthread_cond_destroy(&thr.cond_task_push);
+  pthread_mutex_destroy(&thr.mutex_done);
+  pthread_mutex_destroy(&thr.mutex_push);
   free(thr.cpuid);
   free(thr.task);
   free(thr.worker);
@@ -138,16 +140,18 @@ void threads_global_cleanup()
 // return:
 // -1 no more recyclable tasks, too many tasks running
 // -2 argument error, run function is zero or no work to be done cnt <= item
+// -3 invalid taskid
+// or >= 0: the new task id
 int threads_task(
-    uint32_t       work_item_cnt,
-    uint32_t      *work_item,
-    uint32_t      *done,
-    void          *data,
-    void         (*run)(uint32_t item, void *data),
-    void         (*free)(void*))
+    uint32_t work_item_cnt,
+    int      taskid,
+    void    *data,
+    void   (*run)(uint32_t item, void *data),
+    void   (*free)(void*))
 {
+  if(taskid >= (int)thr.task_max) return -3;
   if(run == 0 || work_item_cnt == 0) return -2;
-  if(work_item && work_item_cnt <= *work_item) return -2;
+  if(taskid >= 0 && thr.task[taskid].work_item_cnt <= thr.task[taskid].work_item) return -2;
   threads_task_t *task = 0;
   for(int k=0;k<thr.task_max;k++)
   { // brute force search for task
@@ -166,10 +170,9 @@ int threads_task(
   task->free = free;
   task->data = data;
   task->work_item_cnt = work_item_cnt;
-  task->work_item_storage = 0;
-  if(work_item) task->work_item = work_item;
-  else task->work_item = &task->work_item_storage;
-  task->done = done;
+  task->reftask = taskid >= 0 ? taskid : task - thr.task;
+  task->work_item = 0;
+  task->done = 0;
 
   // mark as ready
   uint32_t oldval = __sync_val_compare_and_swap(&task->tid, s_task_state_initing, s_task_state_ready);
@@ -178,23 +181,27 @@ int threads_task(
   (void)oldval;
 #endif
   // wake up one thread by signaling the condition
+  pthread_mutex_lock(&thr.mutex_push);
   pthread_cond_signal(&thr.cond_task_push);
-  return 0;
+  pthread_mutex_unlock(&thr.mutex_push);
+  return task->reftask; // return taskid of original job we're working on
 }
 
-#if 0
-// TODO: active wait for task:
-// give us the one global work item atomic you passed to the task[s] when creating them
-// give us the global work item cnt
-// waiting for all threads to idle
-// waiting for any work item to complete
-// waiting for task to complete
+void threads_wait(int taskid)
 {
-  // TODO: call thread worker function and work while we wait
-  // after every step, compare work item cnt and work item counter. if done, return
-  // if not active waiting: wait for "done with one job" signal and check condition afterwards
+  if(taskid < 0 || taskid >= thr.task_max) return;
+  while(thr.task[taskid].done < thr.task[taskid].work_item_cnt)
+  {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 1; // wait for one second max
+    // this is because the threads may finish in between us checking the condition
+    // and waiting on the condition (so the condition will not be triggered again)
+    pthread_mutex_lock(&thr.mutex_done);
+    pthread_cond_timedwait(&thr.cond_task_done, &thr.mutex_done, &ts);
+    pthread_mutex_unlock(&thr.mutex_done);
+  }
 }
-#endif
 
 void threads_global_init()
 {
@@ -247,6 +254,8 @@ void threads_global_init()
 
   pthread_cond_init(&thr.cond_task_done, 0);
   pthread_cond_init(&thr.cond_task_push, 0);
+  pthread_mutex_init(&thr.mutex_done, 0);
+  pthread_mutex_init(&thr.mutex_push, 0);
 
   thr.worker = malloc(sizeof(pthread_t)*thr.num_threads);
   for(uint64_t k=0;k<thr.num_threads;k++)
@@ -257,8 +266,12 @@ void threads_shutdown()
 {
   thr.shutdown = 1;
   // unblock everyone, even though we're not done:
+  pthread_mutex_lock(&thr.mutex_done);
   pthread_cond_broadcast(&thr.cond_task_done);
+  pthread_mutex_unlock(&thr.mutex_done);
+  pthread_mutex_lock(&thr.mutex_push);
   pthread_cond_broadcast(&thr.cond_task_push);
+  pthread_mutex_unlock(&thr.mutex_push);
 }
 
 int threads_shutting_down()
@@ -269,4 +282,18 @@ int threads_shutting_down()
 int threads_num()
 {
   return thr.num_threads;
+}
+
+// returns zero if the task is done
+int threads_task_running(int taskid)
+{
+  if(taskid < 0 || taskid >= thr.task_max) return 0;
+  return thr.task[taskid].done < thr.task[taskid].work_item_cnt;
+}
+
+// returns a progress indicator
+float threads_task_progress(int taskid)
+{
+  if(taskid < 0 || taskid >= thr.task_max) return 0.0f;
+  return thr.task[taskid].done / (float) thr.task[taskid].work_item_cnt;
 }

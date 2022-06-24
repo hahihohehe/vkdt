@@ -13,8 +13,9 @@
 // view modes, lighttable, darkroom, ..
 typedef enum dt_gui_view_t
 {
-  s_view_lighttable = 0,
-  s_view_darkroom   = 1,
+  s_view_files      = 0,
+  s_view_lighttable = 1,
+  s_view_darkroom   = 2,
   s_view_cnt,
 }
 dt_gui_view_t;
@@ -75,9 +76,13 @@ typedef struct dt_gui_wstate_t
   char   notification_msg[256]; // message to display
 
   int fullscreen_view;          // darkroom mode without panels
+  int history_view;             // darkroom mode with left panel shown (history view)
 
   int have_joystick;            // found and enabled a joystick (disable via gui/disable_joystick in config)
   int pentablet_enabled;        // 1 if the stylus is in proxmity of the pen tablet
+
+  int set_nav_focus;            // gamepad navigation delay to communicate between lighttable and darkroom
+  int busy;                     // still busy for how many frames before stopping redraw?
 }
 dt_gui_wstate_t;
 
@@ -105,6 +110,7 @@ typedef struct dt_gui_t
   VkSemaphore      sem_image_acquired [DT_GUI_MAX_IMAGES];
   VkSemaphore      sem_render_complete[DT_GUI_MAX_IMAGES];
 
+  VkResult         graph_res;
   dt_graph_t       graph_dev;
 
   dt_db_t          db;            // image list and current query

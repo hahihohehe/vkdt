@@ -1,4 +1,5 @@
 #include "pipe/graph-io.h"
+#include "pipe/graph-history.h"
 #include "modules/api.h"
 #include "pipe/io.h"
 #include "core/log.h"
@@ -27,8 +28,8 @@ read_param_values_ascii(
   }
   int parid = dt_module_get_param(graph->module[modid].so, parm);
   if(parid < 0)
-  {
-    dt_log(s_log_err|s_log_pipe, "no such parameter name %"PRItkn, dt_token_str(parm));
+  { // is a bit copious:
+    // dt_log(s_log_err|s_log_pipe, "no such parameter name %"PRItkn, dt_token_str(parm));
     return 2;
   }
   const dt_ui_param_t *p = graph->module[modid].so->param[parid];
@@ -296,7 +297,6 @@ dt_graph_write_module_ascii(
 }
 
 // write connection
-// serialises only incoming connections (others can't be resolved due to ambiguity)
 char *
 dt_graph_write_connection_ascii(
     const dt_graph_t *graph,
@@ -328,13 +328,15 @@ dt_graph_write_param_ascii(
     const int         m,
     const int         p,
     char             *line,
-    size_t            size)
+    size_t            size,
+    char            **eop)
 {
   const dt_module_t *mod = graph->module + m;
   WRITE("param:%"PRItkn":%"PRItkn":%"PRItkn":",
       dt_token_str(mod->name),
       dt_token_str(mod->inst),
       dt_token_str(mod->so->param[p]->name));
+  if(eop) *eop = line; // pass on end of prefix to the outside
   int cnt = mod->so->param[p]->cnt;
   if(mod->so->param[p]->name == dt_token("draw"))
   { // draw issues a lot of numbers, only output the needed ones:
@@ -444,7 +446,7 @@ int dt_graph_write_config_ascii(
   // write all params
   for(int m=0;m<graph->num_modules;m++)
     for(int p=0;p<graph->module[m].so->num_params;p++)
-      if(!(buf = dt_graph_write_param_ascii(graph, m, p, buf, end-buf)))
+      if(!(buf = dt_graph_write_param_ascii(graph, m, p, buf, end-buf, 0)))
         goto error;
 
   // write all keyframes
@@ -536,6 +538,7 @@ dt_graph_read_block(
       // just ignore whatever goes wrong:
       if(dt_graph_read_config_line(graph, line))
         dt_log(s_log_pipe, "failed in line %u: '%s'", lno, line);
+      dt_graph_history_line(graph, line);
     }
     fclose(f);
     return 0;

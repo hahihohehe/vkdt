@@ -8,8 +8,10 @@
 #include "gui/darkroom-util.h"
 #include "pipe/graph.h"
 #include "pipe/graph-io.h"
+#include "pipe/graph-defaults.h"
 #include "pipe/modules/api.h"
 #include "pipe/draw.h"
+#include "pipe/graph-history.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -57,7 +59,7 @@ draw_position(
       vx[v] = dt_draw_vertex(xi, yi, pressure * radius, opacity, hardness);
     }
     // trigger draw list upload and recomputation:
-    vkdt.graph_dev.runflags = s_graph_run_record_cmd_buf | s_graph_run_wait_done;
+    vkdt.graph_dev.runflags = s_graph_run_record_cmd_buf | s_graph_run_upload_source | s_graph_run_wait_done;
     vkdt.graph_dev.module[vkdt.wstate.active_widget_modid].flags = s_module_request_read_source;
   }
   else
@@ -90,10 +92,10 @@ darkroom_mouse_button(GLFWwindow* window, int button, int action, int mods)
     return;
   }
 
-  if(action == GLFW_PRESS && x >= vkdt.state.center_x + vkdt.state.center_wd)
+  if(action == GLFW_PRESS && (x < vkdt.state.center_x || x >= vkdt.state.center_x + vkdt.state.center_wd))
     return; // ignore only press over panel for pan
   if(vkdt.wstate.active_widget_modid >= 0 &&
-     x >= vkdt.state.center_x + vkdt.state.center_wd)
+     (x < vkdt.state.center_x || x >= vkdt.state.center_x + vkdt.state.center_wd))
     return; // and all events on panel for on-canvas module interaction
   const float px_dist = 0.1*qvk.win_height;
 
@@ -221,7 +223,7 @@ darkroom_mouse_button(GLFWwindow* window, int button, int action, int mods)
     vkdt.wstate.m_x = vkdt.wstate.m_y = -1;
   }
   else if(action == GLFW_PRESS &&
-      x < vkdt.state.center_x + vkdt.state.center_wd)
+      x > vkdt.state.center_x && x < vkdt.state.center_x + vkdt.state.center_wd)
   {
     if((!vkdt.wstate.pentablet_enabled && button == GLFW_MOUSE_BUTTON_LEFT) ||
        ( vkdt.wstate.pentablet_enabled && button == GLFW_MOUSE_BUTTON_MIDDLE))
@@ -257,7 +259,7 @@ darkroom_mouse_scrolled(GLFWwindow* window, double xoff, double yoff)
     return;
   }
 
-  if(x >= vkdt.state.center_x + vkdt.state.center_wd) return;
+  if(x <= vkdt.state.center_x || x >= vkdt.state.center_x + vkdt.state.center_wd) return;
 
   // active widgets grabbed input?
   if(vkdt.wstate.active_widget_modid >= 0)
@@ -324,7 +326,7 @@ darkroom_mouse_position(GLFWwindow* window, double x, double y)
     return;
   }
 
-  if(x >= vkdt.state.center_x + vkdt.state.center_wd) return;
+  if(x <= vkdt.state.center_x || x >= vkdt.state.center_x + vkdt.state.center_wd) return;
   if(vkdt.wstate.active_widget_modid >= 0)
   {
     // convert view space mouse coordinate to normalised image
@@ -429,11 +431,7 @@ darkroom_keyboard(GLFWwindow *window, int key, int scancode, int action, int mod
   }
   else
 #endif
-  if(action == GLFW_PRESS && (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_E))
-  {
-    dt_view_switch(s_view_lighttable);
-  }
-  else if(action == GLFW_PRESS && key == GLFW_KEY_SPACE)
+  if(action == GLFW_PRESS && key == GLFW_KEY_SPACE)
   {
     dt_gui_dr_next();
   }
@@ -498,7 +496,7 @@ darkroom_process()
   }
 
   if(vkdt.graph_dev.runflags)
-    dt_graph_run(&vkdt.graph_dev,
+    vkdt.graph_res = dt_graph_run(&vkdt.graph_dev,
         vkdt.graph_dev.runflags | s_graph_run_wait_done);
 
   if(vkdt.state.anim_playing && advance)
@@ -552,18 +550,14 @@ darkroom_enter()
     int len = strlen(realimg);
     assert(len > 4);
     realimg[len-4] = 0; // cut away ".cfg"
-    if(!strcasecmp(realimg+len-8, ".mlv"))
-      input_module = dt_token("i-mlv");
-    if(!strcasecmp(realimg+len-8, ".pfm"))
-      input_module = dt_token("i-pfm");
-    if(!strcasecmp(realimg+len-8, ".jpg"))
-      input_module = dt_token("i-jpg");
+    input_module = dt_graph_default_input_module(realimg);
     snprintf(graph_cfg, sizeof(graph_cfg), "%s/default-darkroom.%"PRItkn, dt_pipe.basedir, dt_token_str(input_module));
     load_default = 1;
   }
 
   dt_graph_init(&vkdt.graph_dev);
   vkdt.graph_dev.gui_attached = 1;
+  dt_graph_history_init(&vkdt.graph_dev);
 
   if(dt_graph_read_config_ascii(&vkdt.graph_dev, graph_cfg))
   {
@@ -586,14 +580,13 @@ darkroom_enter()
       return 3;
     }
   }
+  dt_graph_history_reset(&vkdt.graph_dev);
 
-
-  VkResult err = 0;
-  if((err = dt_graph_run(&vkdt.graph_dev, s_graph_run_all)) != VK_SUCCESS)
+  if((vkdt.graph_res = dt_graph_run(&vkdt.graph_dev, s_graph_run_all)) != VK_SUCCESS)
   {
     // TODO: could consider VK_TIMEOUT which sometimes happens on old intel
     dt_log(s_log_err|s_log_gui, "running the graph failed (%s)!",
-        qvk_result_to_string(err));
+        qvk_result_to_string(vkdt.graph_res));
     dt_graph_cleanup(&vkdt.graph_dev);
     return 4;
   }
@@ -613,6 +606,7 @@ darkroom_enter()
 
   // rebuild gui specific to this image
   dt_gui_read_favs("darkroom.ui");
+  darkroom_reset_zoom();
   return 0;
 }
 
@@ -633,6 +627,7 @@ darkroom_leave()
 
   // TODO: repurpose instead of cleanup!
   dt_graph_cleanup(&vkdt.graph_dev);
+  dt_graph_history_cleanup(&vkdt.graph_dev);
   return 0;
 }
 

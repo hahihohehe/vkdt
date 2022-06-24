@@ -45,8 +45,10 @@ typedef struct dt_graph_t
   uint32_t              params_end, params_max;
 
   // store full history in this block:
-  uint8_t              *history_pool;
-  uint32_t              history_end, history_max;
+  char                 *history_pool;
+  uint32_t              history_max;
+  char                **history_item;
+  uint32_t              history_item_cur, history_item_end, history_item_max;
 
   // memory pool for connector allocations
   dt_connector_image_t *conn_image_pool;
@@ -64,6 +66,7 @@ typedef struct dt_graph_t
   VkCommandPool         command_pool;
   VkFence               command_fence;  // one per command buffer
   VkQueue               queue;
+  void                 *queue_mutex;    // if this is set to != 0 will be locked when the queue is used
   uint32_t              queue_idx;
   int                   float_atomics_supported; // copy from qvk to pass down to modules
 

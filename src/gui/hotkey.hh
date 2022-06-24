@@ -26,7 +26,13 @@
 //
 #pragma once
 
+extern "C" {
+#include "gui/gui.h"
+}
+#include "render.h"
 #include "imgui.h"
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
 namespace ImHotKey
 {
@@ -138,7 +144,7 @@ namespace ImHotKey
     {"right", GLFW_KEY_RIGHT}
   }};
 
-  const Key& GetKeyForScanCode(unsigned int scancode)
+  static const Key& GetKeyForScanCode(unsigned int scancode)
   {
     for (unsigned int y = 0; y < 6; y++)
     {
@@ -153,7 +159,7 @@ namespace ImHotKey
     return Keys[0][0];
   }
 
-  void GetHotKeyLib(HotKey *hk, char *buffer, size_t bs)
+  static void GetHotKeyLib(HotKey *hk, char *buffer, size_t bs)
   {
     buffer[0] = 0;
     if(hk->key0 == 0 || hk->key0 >= 512) return;
@@ -166,7 +172,7 @@ namespace ImHotKey
       snprintf(buffer, bs, "%s (%s)", hk->functionName, k0);
   }
 
-  void Edit(HotKey *hotkey, size_t hotkeyCount, const char *popupModal)
+  static void Edit(HotKey *hotkey, size_t hotkeyCount, const char *popupModal)
   {
     static int editingHotkey = -1;
     if (!hotkeyCount) return;
@@ -277,7 +283,7 @@ namespace ImHotKey
 
   static int GetHotKey(HotKey *hotkey, size_t hotkeyCount)
   {
-    if(ImGui::GetIO().WantCaptureKeyboard) return -1;
+    if(dt_gui_imgui_want_text()) return -1;
     for(uint32_t i=0;i<hotkeyCount;i++)
       if((hotkey[i].key0 && glfwGetKey(qvk.window, hotkey[i].key0) == GLFW_PRESS) &&
         (!hotkey[i].key1 || glfwGetKey(qvk.window, hotkey[i].key1) == GLFW_PRESS))

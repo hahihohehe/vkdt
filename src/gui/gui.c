@@ -217,7 +217,7 @@ int dt_gui_init()
 VkResult
 dt_gui_recreate_swapchain()
 {
-  QVKR(vkDeviceWaitIdle(qvk.device));
+  QVKLR(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
   for(int i = 0; i < vkdt.image_count; i++)
     vkDestroyFramebuffer(qvk.device, vkdt.framebuffer[i], 0);
   if(vkdt.render_pass)
@@ -360,9 +360,11 @@ VkResult dt_gui_present()
     .pSwapchains        = &qvk.swap_chain,
     .pImageIndices      = &vkdt.frame_index,
   };
-  QVKR(vkQueuePresentKHR(qvk.queue_graphics, &info));
+  threads_mutex_lock(&qvk.queue_mutex);
+  VkResult res = vkQueuePresentKHR(qvk.queue_graphics, &info);
+  threads_mutex_unlock(&qvk.queue_mutex);
   vkdt.sem_index = (vkdt.sem_index + 1) % vkdt.image_count;
-  return VK_SUCCESS;
+  return res;
 }
 
 void
@@ -460,6 +462,7 @@ void dt_gui_switch_collection(const char *dir)
   dt_thumbnails_cache_abort(&vkdt.thumbnail_gen); // this is essential since threads depend on db
   dt_db_cleanup(&vkdt.db);
   dt_db_init(&vkdt.db);
+  QVKL(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
   dt_db_load_directory(&vkdt.db, &vkdt.thumbnails, dir);
   dt_thumbnails_cache_collection(&vkdt.thumbnail_gen, &vkdt.db);
 

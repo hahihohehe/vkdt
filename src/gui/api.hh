@@ -1,7 +1,12 @@
 #pragma once
 #include "imgui.h"
+#include "widget_filteredlist.hh"
 extern "C" {
 #include "api.h"
+#include "pipe/modules/api.h"
+#include "pipe/graph-io.h"
+#include "pipe/graph-export.h"
+#include "pipe/graph-history.h"
 }
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,31 +22,17 @@ extern "C" {
 // in particular, to realise modal dialogs, all modals are rendered
 // in the dt_gui_*_modals() callback.
 
-void
+inline void
 dt_gui_lt_modals()
 {
   if(ImGui::BeginPopupModal("assign tag", NULL, ImGuiWindowFlags_AlwaysAutoResize))
   {
-    static char name[32] = "all time best";
-    int ok = 0;
-    if(ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-    if(ImGui::InputText("##edit", name, IM_ARRAYSIZE(name), ImGuiInputTextFlags_EnterReturnsTrue))
-    {
-      ok = 1;
-      ImGui::CloseCurrentPopup(); // accept
-    }
-    // ImGui::SetItemDefaultFocus();
-    if(ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
-      ImGui::CloseCurrentPopup(); // discard
-    if (ImGui::Button("cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
-    ImGui::SameLine();
-    if (ImGui::Button("ok", ImVec2(120, 0)))
-    {
-      ok = 1;
-      ImGui::CloseCurrentPopup();
-    }
+    static char filter[256] = "all time best";
+    static char name[PATH_MAX];
+    int ok = filteredlist(0, "%s/tags", filter, name, sizeof(name), 1);
+    if(ok) ImGui::CloseCurrentPopup(); // got some answer
     ImGui::EndPopup();
-    if(ok)
+    if(ok == 1)
     {
       const uint32_t *sel = dt_db_selection_get(&vkdt.db);
       for(uint32_t i=0;i<vkdt.db.selection_cnt;i++)
@@ -51,7 +42,7 @@ dt_gui_lt_modals()
   }
 }
 
-void
+inline void
 dt_gui_lt_assign_tag()
 {
   if(vkdt.db.selection_cnt <= 0)
@@ -60,10 +51,10 @@ dt_gui_lt_assign_tag()
     return;
   }
   ImGui::OpenPopup("assign tag");
-  g_busy += 5;
+  vkdt.wstate.busy += 5;
 }
 
-void
+inline void
 dt_gui_lt_toggle_select_all()
 {
   if(vkdt.db.selection_cnt > 0) // select none
@@ -73,13 +64,13 @@ dt_gui_lt_toggle_select_all()
       dt_db_selection_add(&vkdt.db, i);
 }
 
-void
+inline void
 dt_gui_lt_copy()
 {
   vkdt.wstate.copied_imgid = dt_db_current_imgid(&vkdt.db);
 }
 
-void
+inline void
 dt_gui_lt_paste_history()
 {
   if(vkdt.wstate.copied_imgid == -1u)
@@ -136,7 +127,7 @@ dt_gui_lt_paste_history()
       sel, vkdt.db.selection_cnt);
 }
 
-void
+inline void
 dt_gui_lt_export()
 {
   if(vkdt.db.selection_cnt <= 0)
@@ -177,14 +168,14 @@ dt_gui_lt_export()
 }
 
 // scroll to top of collection
-void
+inline void
 dt_gui_lt_scroll_top()
 {
   ImGui::SetScrollY(0.0f);
 }
 
 // scroll to show current image
-void
+inline void
 dt_gui_lt_scroll_current()
 {
   uint32_t colid = dt_db_current_colid(&vkdt.db);
@@ -195,7 +186,7 @@ dt_gui_lt_scroll_current()
 }
 
 // scroll to end of collection
-void
+inline void
 dt_gui_lt_scroll_bottom()
 {
   ImGui::SetScrollY(ImGui::GetScrollMaxY());
@@ -208,7 +199,7 @@ dt_gui_lt_scroll_bottom()
 // darkroom mode accessors
 // XXX these modals should likely go into render.cc or something else!
 // XXX they cannot be called from anywhere else and context still depends on them!
-void
+inline void
 dt_gui_dr_modals()
 {
   if(ImGui::BeginPopupModal("create preset", NULL, ImGuiWindowFlags_AlwaysAutoResize))
@@ -255,7 +246,7 @@ dt_gui_dr_modals()
         ImGui::SetTooltip("type to filter the list\n"
                           "press enter to accept\n"
                           "press escape to close");
-      if(ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+      if(dt_gui_imgui_nav_input(ImGuiNavInput_Cancel) > 0.0f)
         ok = 3;
 
       for(int i=0;i<line_cnt;i++)
@@ -325,82 +316,16 @@ dt_gui_dr_modals()
   }
   if(ImGui::BeginPopupModal("apply preset", NULL, ImGuiWindowFlags_AlwaysAutoResize))
   {
-    int ok = 0;
     char filename[1024] = {0};
     uint32_t cid = dt_db_current_imgid(&vkdt.db);
     if(cid != -1u) dt_db_image_path(&vkdt.db, cid, filename, sizeof(filename));
     if(!strstr(vkdt.db.dirname, "examples") && !strstr(filename, "examples"))
       dt_graph_write_config_ascii(&vkdt.graph_dev, filename);
-    int pick = -1;
-#define FREE_ENT do {\
-    for(int i=0;i<ent_cnt;i++) free(ent[i]);\
-    free(ent); ent = 0; ent_cnt = 0; } while(0)
-    static struct dirent **ent = 0;
-    static int ent_cnt = 0;
-    static char filter[256] = "";
-    if(ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-    if(ImGui::InputText("##edit", filter, IM_ARRAYSIZE(filter), ImGuiInputTextFlags_EnterReturnsTrue))
-      ok = 1;
-    if(ImGui::IsItemHovered())
-      ImGui::SetTooltip(
-          "type to filter the list of presets\n"
-          "press enter to apply top item\n"
-          "press escape to close");
-    if(ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
-    { FREE_ENT; ImGui::CloseCurrentPopup(); }
-
-    if(!ent_cnt)
-    { // open preset directory
-      char dirname[PATH_MAX];
-      snprintf(dirname, sizeof(dirname), "%s/presets", vkdt.db.basedir);
-      ent_cnt = scandir(dirname, &ent, 0, alphasort);
-      if(ent_cnt == -1)
-      { // assume the directory does not exist, copy over:
-        int ret = mkdir(dirname, 0755);
-        char srcname[PATH_MAX+100];
-        snprintf(srcname, sizeof(srcname), "%s/data/presets", dt_pipe.basedir);
-        ent_cnt = scandir(srcname, &ent, 0, alphasort);
-        for(int i=0;i<ent_cnt;i++) if(strstr(ent[i]->d_name, ".pst"))
-        {
-          char f0[2*PATH_MAX+100], f1[2*PATH_MAX+100];
-          snprintf(f0, sizeof(f0), "%s/data/presets/%s", dt_pipe.basedir, ent[i]->d_name);
-          snprintf(f1, sizeof(f1), "%s/presets/%s", vkdt.db.basedir, ent[i]->d_name);
-          struct stat stat;
-          int fd0 = open(f0, O_RDONLY), fd1 = open(f1, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-          if(fd0 == -1 || fd1 == -1)  goto copy_error;
-          if(fstat(fd0, &stat) == -1) goto copy_error;
-          { loff_t len = stat.st_size;
-          do {
-            ret = copy_file_range(fd0, 0, fd1, 0, len, 0);
-          } while((len-=ret) > 0 && ret > 0);}
-copy_error:
-          if(fd0 >= 0) close(fd0);
-          if(fd0 >= 0) close(fd1);
-        }
-        FREE_ENT;
-      }
-    }
-    for(int i=0;i<ent_cnt;i++)
+    static char filter[256];
+    int ok = filteredlist("%s/data/presets", "%s/presets", filter, filename, sizeof(filename), 0);
+    if(ok) ImGui::CloseCurrentPopup();
+    if(ok == 1)
     {
-      if(strstr(ent[i]->d_name, filter))
-      if(strstr(ent[i]->d_name, ".pst"))
-      {
-        if(pick < 0) pick = i; // for the "press enter" case
-        if(ImGui::Button(ent[i]->d_name))
-        {
-          ok = 1;
-          pick = i;
-        }
-      }
-    }
-
-    if (ImGui::Button("cancel", ImVec2(120, 0))) {FREE_ENT; ImGui::CloseCurrentPopup();}
-    ImGui::SameLine();
-    if (ImGui::Button("ok", ImVec2(120, 0))) ok = 1;
-    if(ok)
-    {
-      char filename[PATH_MAX];
-      snprintf(filename, sizeof(filename), "%s/presets/%s", vkdt.db.basedir, ent[pick]->d_name);
       FILE *f = fopen(filename, "rb");
       uint32_t lno = 0;
       if(f)
@@ -413,6 +338,7 @@ copy_error:
           lno++;
           // > 0 are warnings, < 0 are fatal, 0 is success
           if(dt_graph_read_config_line(&vkdt.graph_dev, line) < 0) goto error;
+          dt_graph_history_line(&vkdt.graph_dev, line);
         }
         fclose(f);
         vkdt.graph_dev.runflags = static_cast<dt_graph_run_t>(s_graph_run_all);
@@ -424,23 +350,21 @@ error:
         if(f) fclose(f);
         dt_gui_notification("failed to read %s line %d", filename, lno);
       }
-      FREE_ENT;
-      ImGui::CloseCurrentPopup();
-    }
+    } // end if ok == 1
     ImGui::EndPopup();
-  }
+  } // end BeginPopupModal
 }
 
-void
+inline void
 dt_gui_dr_preset_create()
 {
   ImGui::OpenPopup("create preset");
-  g_busy += 5;
+  vkdt.wstate.busy += 5;
 }
 
-void
+inline void
 dt_gui_dr_preset_apply()
 {
   ImGui::OpenPopup("apply preset");
-  g_busy += 5;
+  vkdt.wstate.busy += 5;
 }

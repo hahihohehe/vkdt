@@ -27,7 +27,7 @@ dt_gui_dr_zoom()
   float scale = vkdt.state.scale <= 0.0f ? MIN(imwd/vkdt.wstate.wd, imht/vkdt.wstate.ht) : vkdt.state.scale;
   float im_x = (x - (vkdt.state.center_x + imwd)/2.0f);
   float im_y = (y - (vkdt.state.center_y + imht)/2.0f);
-  if(vkdt.state.scale <= 0.0f)
+  if(vkdt.state.scale < 1.0f)
   {
     vkdt.state.scale = 1.0f;
     const float dscale = 1.0f/scale - 1.0f/vkdt.state.scale;
@@ -59,10 +59,18 @@ dt_gui_dr_next()
     uint32_t next = dt_db_current_colid(&vkdt.db) + 1;
     if(next < vkdt.db.collection_cnt)
     {
-      darkroom_leave(); // writes back thumbnails. maybe there'd be a cheaper way to invalidate.
+      int err;
+      err = darkroom_leave(); // writes back thumbnails. maybe there'd be a cheaper way to invalidate.
+      if(err) return;
       dt_db_selection_clear(&vkdt.db);
       dt_db_selection_add(&vkdt.db, next);
-      darkroom_enter();
+      err = darkroom_enter();
+      if(err)
+      { // roll back
+        dt_db_selection_clear(&vkdt.db);
+        dt_db_selection_add(&vkdt.db, next-1);
+        darkroom_enter(); // hope they take us back
+      }
     }
   }
 }
@@ -80,10 +88,18 @@ dt_gui_dr_prev()
     int32_t next = dt_db_current_colid(&vkdt.db) - 1;
     if(next >= 0)
     {
-      darkroom_leave(); // writes back thumbnails. maybe there'd be a cheaper way to invalidate.
+      int err;
+      err = darkroom_leave(); // writes back thumbnails. maybe there'd be a cheaper way to invalidate.
+      if(err) return;
       dt_db_selection_clear(&vkdt.db);
       dt_db_selection_add(&vkdt.db, next);
-      darkroom_enter();
+      err = darkroom_enter();
+      if(err)
+      { // roll back
+        dt_db_selection_clear(&vkdt.db);
+        dt_db_selection_add(&vkdt.db, next+1);
+        darkroom_enter(); // hope they take us back
+      }
     }
   }
 }
@@ -171,6 +187,26 @@ dt_gui_dr_toggle_fullscreen_view()
 }
 
 static inline void
+dt_gui_dr_toggle_history()
+{
+  vkdt.wstate.history_view ^= 1;
+  if(vkdt.wstate.history_view)
+  {
+    vkdt.state.center_x = vkdt.style.border_frac * qvk.win_width + vkdt.state.panel_wd;
+    vkdt.state.center_y = vkdt.style.border_frac * qvk.win_width;
+    vkdt.state.center_wd = qvk.win_width * (1.0f-2.0f*vkdt.style.border_frac) - 2*vkdt.state.panel_wd;
+    vkdt.state.center_ht = qvk.win_height - 2*vkdt.style.border_frac * qvk.win_width;
+  }
+  else
+  {
+    vkdt.state.center_x = vkdt.style.border_frac * qvk.win_width;
+    vkdt.state.center_y = vkdt.style.border_frac * qvk.win_width;
+    vkdt.state.center_wd = qvk.win_width * (1.0f-2.0f*vkdt.style.border_frac) - vkdt.state.panel_wd;
+    vkdt.state.center_ht = qvk.win_height - 2*vkdt.style.border_frac * qvk.win_width;
+  }
+}
+
+static inline void
 dt_gui_dr_enter_fullscreen_view()
 {
   if(!vkdt.wstate.fullscreen_view)
@@ -182,4 +218,14 @@ dt_gui_dr_leave_fullscreen_view()
 {
   if(vkdt.wstate.fullscreen_view)
     dt_gui_dr_toggle_fullscreen_view();
+}
+
+static inline void
+dt_gui_lt_duplicate()
+{
+  if(!vkdt.db.selection_cnt) return; // no images selected
+  dt_db_duplicate_selected_images(&vkdt.db); // just create .cfg files, don't update db
+  char dir[PATH_MAX]; // reload directory:
+  snprintf(dir, sizeof(dir), "%s", vkdt.db.dirname);
+  dt_gui_switch_collection(dir);
 }

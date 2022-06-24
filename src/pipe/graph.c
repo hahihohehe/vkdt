@@ -88,6 +88,8 @@ dt_graph_init(dt_graph_t *g)
   // grab default queue:
   g->queue = qvk.queue_compute;
   g->queue_idx = qvk.queue_idx_compute;
+  if(g->queue == qvk.queue_graphics)
+    g->queue_mutex = &qvk.queue_mutex;
 
   g->lod_scale = 1;
   g->active_module = -1;
@@ -99,7 +101,7 @@ dt_graph_cleanup(dt_graph_t *g)
 #ifdef DEBUG_MARKERS
   dt_stringpool_cleanup(&g->debug_markers);
 #endif
-  QVK(vkDeviceWaitIdle(qvk.device));
+  QVKL(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
   if(!dt_pipe.modules_reloaded)
     for(int i=0;i<g->num_modules;i++)
       if(g->module[i].so->cleanup)
@@ -1263,7 +1265,7 @@ alloc_outputs3(dt_graph_t *graph, dt_node_t *node)
 // has been processed. that is: all inputs and all of our outputs
 // which aren't connected to another node.
 // note that vkfree doesn't in fact free anything in case the reference count is > 0
-static inline void
+static inline VkResult
 free_inputs(dt_graph_t *graph, dt_node_t *node)
 {
   for(int i=0;i<node->num_connectors;i++)
@@ -1279,8 +1281,11 @@ free_inputs(dt_graph_t *graph, dt_node_t *node)
       //     dt_token_str(c->name));
       // ssbo do not use staging memory for sinks, and if they did these are no sinks:
       for(int f=0;f<c->frames;f++) for(int k=0;k<MAX(1,c->array_length);k++)
-        dt_vkfree(&graph->heap, 
-            dt_graph_connector_image(graph, node-graph->node, i, k, f)->mem);
+      {
+        dt_connector_image_t *im = dt_graph_connector_image(graph, node-graph->node, i, k, f);
+        if(!im) return VK_INCOMPLETE;
+        dt_vkfree(&graph->heap, im->mem);
+      }
       // note that we keep the offset and VkImage etc around, we'll be using
       // these in consecutive runs through the pipeline and only clean up at
       // the very end. we just instruct our allocator that we're done with
@@ -1295,12 +1300,12 @@ free_inputs(dt_graph_t *graph, dt_node_t *node)
       //     c->connected_mi, c->mem->ref);
       for(int f=0;f<c->frames;f++) for(int k=0;k<MAX(1,c->array_length);k++)
       {
-        if(dt_connector_ssbo(c) && c->type == dt_token("source"))
-          dt_vkfree(&graph->heap_staging, // host visible buffer
-              dt_graph_connector_image(graph, node-graph->node, i, k, f)->mem);
-        else
-          dt_vkfree(&graph->heap, // device visible only
-              dt_graph_connector_image(graph, node-graph->node, i, k, f)->mem);
+        dt_connector_image_t *im = dt_graph_connector_image(graph, node-graph->node, i, k, f);
+        if(!im) return VK_INCOMPLETE;
+        if(dt_connector_ssbo(c) && c->type == dt_token("source")) // host visible buffer
+          dt_vkfree(&graph->heap_staging, im->mem);
+        else // device visible only
+          dt_vkfree(&graph->heap, im->mem);
       }
     }
     // staging memory for sources or sinks only needed during execution once
@@ -1313,6 +1318,7 @@ free_inputs(dt_graph_t *graph, dt_node_t *node)
       dt_vkfree(&graph->heap_staging, c->mem_staging);
     }
   }
+  return VK_SUCCESS;
 }
 
 // propagate full buffer size from source to sink
@@ -1965,7 +1971,7 @@ VkResult dt_graph_run(
   // if we intend to clean it up behind their back
   if(graph->gui_attached &&
     (run & (s_graph_run_alloc | s_graph_run_create_nodes)))
-    QVKR(vkDeviceWaitIdle(qvk.device));
+    QVKLR(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
 
   if(run & s_graph_run_alloc)
   {
@@ -2020,11 +2026,7 @@ VkResult dt_graph_run(
     if(graph->module[modid[i]].connector[0].type == dt_token("sink"))
     {
       if(graph->module[modid[i]].connector[0].roi.full_wd == 0)
-      {
-        dt_log(s_log_err, "roi of last connected sink module %"PRItkn" did not get initialised!",
-            dt_token_str(graph->module[modid[i]].name));
         return VK_INCOMPLETE;
-      }
       break; // we're good
     }
   }
@@ -2178,7 +2180,7 @@ VkResult dt_graph_run(
     for(int i=0;i<cnt;i++)
     {
       QVKR(alloc_outputs(graph, graph->node+nodeid[i]));
-      free_inputs       (graph, graph->node+nodeid[i]);
+      QVKR(free_inputs  (graph, graph->node+nodeid[i]));
     }
   }
 
@@ -2187,7 +2189,7 @@ VkResult dt_graph_run(
     run |= s_graph_run_upload_source; // new mem means new source
     if(graph->vkmem)
     {
-      QVKR(vkDeviceWaitIdle(qvk.device));
+      QVKLR(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
       vkFreeMemory(qvk.device, graph->vkmem, 0);
     }
     // image data to pass between nodes
@@ -2206,7 +2208,7 @@ VkResult dt_graph_run(
     run |= s_graph_run_upload_source; // new mem means new source
     if(graph->vkmem_staging)
     {
-      QVKR(vkDeviceWaitIdle(qvk.device));
+      QVKLR(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
       vkFreeMemory(qvk.device, graph->vkmem_staging, 0);
     }
     // staging memory to copy to and from device
@@ -2225,7 +2227,7 @@ VkResult dt_graph_run(
   {
     if(graph->vkmem_uniform)
     {
-      QVKR(vkDeviceWaitIdle(qvk.device));
+      QVKLR(&qvk.queue_mutex, vkDeviceWaitIdle(qvk.device));
       vkFreeMemory(qvk.device, graph->vkmem_uniform, 0);
     }
     // uniform data to pass parameters
@@ -2467,14 +2469,10 @@ VkResult dt_graph_run(
                   .commandBufferCount = 1,
                   .pCommandBuffers    = &graph->command_buffer,
                 };
-                if(graph->queue == qvk.queue_graphics)
-                  threads_mutex_lock(&qvk.queue_mutex);
                 vkResetFences(qvk.device, 1, &graph->command_fence);
-                QVKR(vkQueueSubmit(graph->queue, 1, &submit, graph->command_fence));
+                QVKLR(graph->queue_mutex, vkQueueSubmit(graph->queue, 1, &submit, graph->command_fence));
                 if(run & s_graph_run_wait_done) // timeout in nanoseconds, 30 is about 1s
                   QVKR(vkWaitForFences(qvk.device, 1, &graph->command_fence, VK_TRUE, 1ul<<40));
-                if(graph->queue == qvk.queue_graphics)
-                  threads_mutex_unlock(&qvk.queue_mutex);
                 QVKR(vkBeginCommandBuffer(graph->command_buffer, &begin_info));
                 vkCmdResetQueryPool(graph->command_buffer, graph->query_pool, 0, graph->query_max);
                 QVKR(vkMapMemory(qvk.device, graph->vkmem_staging, 0, VK_WHOLE_SIZE, 0, (void**)&mapped));
@@ -2553,14 +2551,10 @@ VkResult dt_graph_run(
 
   if(run & s_graph_run_record_cmd_buf)
   {
-    if(graph->queue == qvk.queue_graphics)
-      threads_mutex_lock(&qvk.queue_mutex);
     vkResetFences(qvk.device, 1, &graph->command_fence);
-    QVKR(vkQueueSubmit(graph->queue, 1, &submit, graph->command_fence));
+    QVKLR(graph->queue_mutex, vkQueueSubmit(graph->queue, 1, &submit, graph->command_fence));
     if(run & s_graph_run_wait_done) // timeout in nanoseconds, 30 is about 1s
       QVKR(vkWaitForFences(qvk.device, 1, &graph->command_fence, VK_TRUE, 1ul<<40));
-    if(graph->queue == qvk.queue_graphics)
-      threads_mutex_unlock(&qvk.queue_mutex);
   }
   
   if((module_flags & s_module_request_write_sink) ||
@@ -2603,11 +2597,12 @@ VkResult dt_graph_run(
       accum_time += graph->query_pool_results[i+1] - graph->query_pool_results[i];
     else
     {
-      if(accum_time > 0)
+      if(i && accum_time > graph->query_pool_results[i-1] - graph->query_pool_results[i-2])
         dt_log(s_log_perf, "sum %"PRItkn":\t%8.3f ms",
             dt_token_str(last_name),
             accum_time * 1e-6 * qvk.ticks_to_nanoseconds);
-      accum_time = 0;
+      if(i < graph->query_cnt-2)
+        accum_time = graph->query_pool_results[i+1] - graph->query_pool_results[i];
     }
     last_name = graph->query_name[i];
     // i think this is the most horrible line of printf i've ever written:
@@ -2650,7 +2645,10 @@ dt_graph_connector_image(
     int         frame)  // frame number
 {
   if(graph->node[nid].conn_image[cid] == -1)
+  {
     dt_log(s_log_err, "requesting disconnected image buffer!");
+    return 0;
+  }
   int nid2 = nid, cid2 = cid;
   if(dt_connector_input(graph->node[nid].connector+cid))
   {
@@ -2678,7 +2676,6 @@ void dt_graph_reset(dt_graph_t *g)
   g->thumbnail_image = 0;
   g->query_cnt = 0;
   g->params_end = 0;
-  g->history_end = 0;
   for(int i=0;i<g->num_modules;i++)
     if(g->module[i].so->cleanup)
       g->module[i].so->cleanup(g->module+i);

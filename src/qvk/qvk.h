@@ -34,9 +34,32 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } \
   } while(0)
 
+// check error and also return it if fail
 #define QVKR(...) \
   do { \
     VkResult _res = __VA_ARGS__; \
+    if(_res != VK_SUCCESS) { \
+      dt_log(s_log_qvk, "error %s executing %s!", qvk_result_to_string(_res), # __VA_ARGS__); \
+      return _res; \
+    } \
+  } while(0)
+
+#define QVKL(mutex, ...) \
+  do { \
+    if(mutex) threads_mutex_lock(mutex);\
+    VkResult _res = __VA_ARGS__; \
+    if(mutex) threads_mutex_unlock(mutex);\
+    if(_res != VK_SUCCESS) { \
+      dt_log(s_log_qvk, "error %s executing %s!", qvk_result_to_string(_res), # __VA_ARGS__); \
+    } \
+  } while(0)
+
+// lock mutex, check error, return if fail
+#define QVKLR(mutex, ...) \
+  do { \
+    if(mutex) threads_mutex_lock(mutex);\
+    VkResult _res = __VA_ARGS__; \
+    if(mutex) threads_mutex_unlock(mutex);\
     if(_res != VK_SUCCESS) { \
       dt_log(s_log_qvk, "error %s executing %s!", qvk_result_to_string(_res), # __VA_ARGS__); \
       return _res; \
@@ -62,6 +85,8 @@ typedef struct qvk_t
   VkQueue                     queue_compute;
   VkQueue                     queue_work0;
   VkQueue                     queue_work1;
+  threads_mutex_t             queue_work0_mutex;
+  threads_mutex_t             queue_work1_mutex;
   int32_t                     queue_idx_graphics;
   int32_t                     queue_idx_compute;
   int32_t                     queue_idx_work0;
