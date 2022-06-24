@@ -9,6 +9,7 @@ layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_siz
 layout(push_constant, std140) uniform push_t
 {
   uint filters;
+  uint i;
 } push;
 
 // global uniform stuff about image and roi
@@ -121,29 +122,36 @@ main()
   vec4 wsum = vec4(0, 0, 0, 0);
 
   float mask = texelFetch(mask, spos/2, 0).r;
-  if (mask < params.cert)
+  if (push.i == 1)
   {
-    for (int i = -SSIZE; i <= SSIZE; i++)
+    if (mask < params.cert)
     {
-      for (int j = -SSIZE; j <= SSIZE; j++)
+      for (int i = -SSIZE; i <= SSIZE; i++)
       {
-        // TODO: include mask and gradients
-        float weight;
-        float phi = M_PI * params.rot;
-        float afac = 1 - params.ani;
-        vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));  // needs to be replaced according to estimated gradients
-        ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
-        vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
-        if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
-        if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-        eval_gauss(cov, actualsourcepos - ivec2(epos), weight);
-        float intensity = texelFetch(img, sourcepos, 0).r;
-        // acc += weight * intensity * color_vec(sourcepos);
-        // wsum += 0.1 * weight * color_vec(sourcepos);
-        acc += weight * intensity * color_vec(sourcepos);
-        // acc += vec4(1, 0, 0, 0);
-        // wsum += vec4(1, 0, 0, 0);
-        wsum += weight * color_vec(sourcepos);
+        for (int j = -SSIZE; j <= SSIZE; j++)
+        {
+          // TODO: include mask and gradients
+          float weight;
+          float phi = M_PI * params.rot;
+          float afac = 1 - params.ani;
+          vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
+          ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
+          vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
+          if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
+          if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+          eval_gauss(cov, actualsourcepos - ivec2(epos), weight);
+          float intensity = texelFetch(img, sourcepos, 0).r;
+
+          // Debug gaussians
+          if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+
+          // acc += weight * intensity * color_vec(sourcepos);
+          // wsum += 0.1 * weight * color_vec(sourcepos);
+          acc += weight * intensity * color_vec(sourcepos);
+          // acc += vec4(1, 0, 0, 0);
+          // wsum += vec4(1, 0, 0, 0);
+          wsum += weight * color_vec(sourcepos);
+        }
       }
     }
     // wsum += vec4(.1, .1, .1, 0);
