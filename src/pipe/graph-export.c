@@ -265,6 +265,8 @@ done:
   }
   else
   {
+    // very dirty temporal fix to be able to work with cli
+    dt_graph_run(graph, s_graph_run_all);
     return dt_graph_run(graph, s_graph_run_all);
   }
 }
