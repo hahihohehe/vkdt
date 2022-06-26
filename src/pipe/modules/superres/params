@@ -5,3 +5,4 @@ rot:float:1:0.0
 ani:float:1:0.0
 mask:float:1:0.0
 off:float:1:1.0
+image:int:1:-1

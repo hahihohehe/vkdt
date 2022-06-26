@@ -179,7 +179,7 @@ create_nodes(
                     .push_constant_size = 2 * sizeof(uint32_t),
                     .push_constant = {
                             module->img_param.filters,
-                            (uint32_t) i,
+                            (uint32_t) i + 1,
                     },
             };
 

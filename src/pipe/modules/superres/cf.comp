@@ -20,6 +20,8 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float rot;
   float ani;
   float mask;
+  float off;
+  int image;
 } params;
 
 layout( // input rggb original
@@ -93,7 +95,7 @@ main()
   vec4 acc = vec4(0, 0, 0, 1);  // because first image
   vec4 wsum = vec4(0, 0, 0, 1);
 
-  if (true) {
+  if (params.image == 0 || params.image == -1) {
     for (int i = -SSIZE; i <= SSIZE; i++)
     {
       for (int j = -SSIZE; j <= SSIZE; j++)
