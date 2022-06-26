@@ -58,21 +58,21 @@ color_vec(    // get a normalized vector with one of r, g, b being 1, all other 
 ivec2 ipos
 )
 {
-  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);// offset inside block
   if (boff == ivec2(1, 0))
-  {   // green
+  { // green
     return vec4(0, 1, 0, 0);
   }
   else if (boff == ivec2(0, 1))
-  {   // green
+  { // green
     return vec4(0, 1, 0, 0);
   }
   else if (boff == ivec2(0, 0))
-  {   // red
+  { // red
     return vec4(1, 0, 0, 0);
   }
   else
-  {   // blue
+  { // blue
     return vec4(0, 0, 1, 0);
   }
 }
@@ -93,7 +93,7 @@ main()
   vec4 acc = vec4(0, 0, 0, 1);  // because first image
   vec4 wsum = vec4(0, 0, 0, 1);
 
-  if (false) {
+  if (true) {
     for (int i = -SSIZE; i <= SSIZE; i++)
     {
       for (int j = -SSIZE; j <= SSIZE; j++)
@@ -108,11 +108,18 @@ main()
         if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
         if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
         eval_gauss(cov, actualsourcepos - epos, weight);
-        float intensity = texelFetch(img, sourcepos, 0).r;
-        // acc += weight * intensity * color_vec(sourcepos);
-        // wsum += 0.1 * weight * color_vec(sourcepos);
-        acc += weight * intensity * color_vec(sourcepos);
-        wsum += weight * color_vec(sourcepos);
+
+        if (push.filters == 0)
+        {
+          acc += weight * texelFetch(img, sourcepos, 0);
+          wsum += weight * vec4(1, 1, 1, 0);
+        }
+        else
+        {
+          float intensity = texelFetch(img, sourcepos, 0).r;
+          acc += weight * intensity * color_vec(sourcepos);
+          wsum += weight * color_vec(sourcepos);
+        }
       }
     }
   }
