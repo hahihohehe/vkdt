@@ -18,6 +18,17 @@ void modify_roi_in(
     ri->wd = ri->full_wd;
     ri->ht = ri->full_ht;
     ri->scale = 1.0f;
+
+    // weitere inputs
+
+    for (int i = 1; i < OUTPUT; ++i)
+    {
+        module->connector[i].roi.wd = module->connector[i].roi.full_wd;
+        module->connector[i].roi.ht = module->connector[i].roi.full_ht;
+        module->connector[i].roi.scale = 1.0f;
+    }
+
+
 }
 
 void modify_roi_out(

@@ -35,7 +35,7 @@ set = 1, binding = 1
 
 layout( // input mask
 set = 1, binding = 2
-) uniform sampler2D mask;
+) uniform sampler2D mask_in;
 
 layout( // input accumulation buffer
 set = 1, binding = 3
@@ -122,7 +122,12 @@ main()
   vec4 acc = vec4(0, 0, 0, 0);
   vec4 wsum = vec4(0, 0, 0, 0);
 
-  float mask = texelFetch(mask, spos/2, 0).r;
+  float mask;
+  if (push.filters == 0)
+    mask = texelFetch(mask_in, spos/4, 0).r;
+  else
+    mask = texelFetch(mask_in, spos/2, 0).r;
+
   if (push.i == params.image || params.image == -1)
   {
     if (mask < params.cert)
