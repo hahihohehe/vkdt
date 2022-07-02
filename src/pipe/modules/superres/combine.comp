@@ -150,7 +150,7 @@ main()
           if (push.filters == 0)
           {
             // Debug gaussians
-            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
             acc += weight * texelFetch(img, sourcepos, 0);
             wsum += weight * vec4(1, 1, 1, 0);
           }
@@ -158,7 +158,7 @@ main()
             float intensity = texelFetch(img, sourcepos, 0).r;
 
             // Debug gaussians
-            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
 
             acc += weight * intensity * color_vec(sourcepos);
             wsum += weight * color_vec(sourcepos);
