@@ -96,7 +96,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 2   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 3   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -106,11 +106,10 @@ main()
 
   float res = params.inc + 1.0;
 
-  ivec2 spos = ivec2(vec2(ipos) / res);
-
   // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
   // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
-  vec2 epos = ipos / res;   // effective position
+  vec2 epos = vec2(ipos) / res;   // effective position
+  ivec2 spos = ivec2(epos + vec2(.5, .5));
   epos += params.off * texelFetch(off, spos, 0).xy;
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
@@ -141,17 +140,17 @@ main()
           float phi = M_PI * params.rot;
           float afac = 1 - params.ani;
           vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
-          ivec2 sourcepos = ivec2(epos) + ivec2(i, j);// position of sample
-          vec2 actualsourcepos = epos + ivec2(i, j);// fp position of source pixel
+          ivec2 sourcepos = spos + ivec2(i, j);// position of sample
+          vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-          eval_gauss(cov, actualsourcepos - ivec2(epos), weight);
+          eval_gauss(cov, actualsourcepos - epos, weight);
 
 
           if (push.filters == 0)
           {
             // Debug gaussians
-            //if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
             acc += weight * texelFetch(img, sourcepos, 0);
             wsum += weight * vec4(1, 1, 1, 0);
           }
@@ -159,7 +158,7 @@ main()
             float intensity = texelFetch(img, sourcepos, 0).r;
 
             // Debug gaussians
-            //if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
 
             acc += weight * intensity * color_vec(sourcepos);
             wsum += weight * color_vec(sourcepos);
