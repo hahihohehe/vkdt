@@ -1,0 +1,74 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+#include "config.h"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+  int  scale;
+} push;
+
+layout( // input buffer rggb
+set = 1, binding = 0
+) uniform sampler2D F_in;
+
+layout( // input buffer rggb
+set = 1, binding = 1
+) uniform sampler2D G_in;
+
+layout( // input buffer rggb
+set = 1, binding = 2
+) uniform sampler2D off_in;
+
+layout( // output buffer gray scale
+set = 1, binding = 3
+) uniform writeonly image2D off_out;
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(off_out)))) return;
+
+  vec2 h_k = texelFetch(off_in, ipos, 0).xy;
+
+  vec2 change = vec2(0, 0);
+  float divisor = 0;
+
+  // this stategy only works for demosaiced input
+  for (int i = -1; i <= 1; i++)
+  {
+    for (int j = -1; j <= 1; j++)
+    {
+      ivec2 displ = ivec2(i, j);
+      float G = length(texelFetch(G_in, ipos + displ, 0).rgb);
+      float F = length(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
+
+      // strategy for calculating I_F needs to be replaced for bayer mosaic
+      float F_1 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k), 0).rgb);
+      float F_2 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 0), 0).rgb);
+      float F_3 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(0, 1), 0).rgb);
+      float F_4 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 1), 0).rgb);
+
+      vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
+
+      vec2 I_F = vec2((F_2 - F_1) * (1 - sub.y) + (F_4 - F_3) * sub.y, (F_3 - F_1) * (1 - sub.y) + (F_4 - F_2) * sub.y);
+      //vec2 I_F = vec2(3, 3);
+
+      change += I_F * (G - F);
+      //change += I_F;
+      divisor += dot(I_F, I_F);
+    }
+  }
+
+  //change /= divisor;
+  vec2 h_k1 = h_k + 1 * change;
+
+  imageStore(off_out, ipos, vec4(h_k1, h_k1));
+  //imageStore(off_out, ipos, vec4(h_k + vec2(3, 3), h_k + vec2(3, 3)));
+}

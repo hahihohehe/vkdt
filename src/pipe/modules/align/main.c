@@ -348,7 +348,7 @@ create_nodes(
     },
   };
 
-  if (0 && lk_r <= 0) {
+  if (lk_r <= 0) {
     dt_connector_copy(graph, module, 0, id_warp, 0);
     CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
     dt_connector_copy(graph, module, 1, id_warp, 2);
