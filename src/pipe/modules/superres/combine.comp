@@ -140,7 +140,7 @@ main()
           float phi = M_PI * params.rot;
           float afac = 1 - params.ani;
           vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
-          ivec2 sourcepos = spos + ivec2(i, j);// position of sample
+          ivec2 sourcepos = ivec2(epos + vec2(.5, .5)) + ivec2(i, j);// position of sample
           vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
