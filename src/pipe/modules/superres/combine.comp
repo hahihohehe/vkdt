@@ -65,11 +65,11 @@ eval_gauss(
 vec4 cov, vec2 off,
 out float weight)
 {
-  vec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
-  mat2 E = mat2(cov.z, -cov.w,
+  dvec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
+  dmat2 E = dmat2(cov.z, -cov.w,
                 cov.w,  cov.z);
-  vec2 of = E * off;
-  weight = clamp(exp(-0.5*dot(of/eval, of)), 1e-4, 1.0);
+  dvec2 of = E * off;
+  weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1.0);
 }
 
 vec4

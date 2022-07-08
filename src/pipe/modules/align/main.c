@@ -15,6 +15,10 @@ check_params(
     uint32_t     parid,
     void        *oldval)
 {
+  if (parid == 6)
+  {
+    return s_graph_run_all;
+  }
   if(parid >= 2 && parid <= 5)
   { // radii
     float oldrad = *(float*)oldval;
@@ -60,6 +64,8 @@ create_nodes(
     dt_graph_t  *graph,
     dt_module_t *module)
 {
+  int lk_r = dt_module_param_int(module, 6)[0];
+
   // connect each mosaic input to half, generate grey lum map for both input images
   // by a sequence of half, down4, down4, down4 kernels.
   // then compute distance (dist kernel) coarse to fine, merge best offsets (merge kernel),
@@ -341,11 +347,72 @@ create_nodes(
       block,
     },
   };
-  dt_connector_copy(graph, module, 0, id_warp, 0);
-  CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
-  dt_connector_copy(graph, module, 1, id_warp, 2);
-  dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
-  dt_connector_copy(graph, module, 6, id_warp, 4); // pass on mv
+
+  if (0 && lk_r <= 0) {
+    dt_connector_copy(graph, module, 0, id_warp, 0);
+    CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
+    dt_connector_copy(graph, module, 1, id_warp, 2);
+    dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
+    dt_connector_copy(graph, module, 6, id_warp, 4); // pass on mv
+  }
+  else {
+    assert(graph->num_nodes < graph->max_nodes);
+    const int id_lk = graph->num_nodes++;
+    graph->node[id_lk] = (dt_node_t) {
+        .name   = dt_token("align"),
+        .kernel = dt_token("lk"),
+        .module = module,
+        .wd     = roi[0].wd,
+        .ht     = roi[0].ht,
+        .dp     = 1,
+        .num_connectors = 5,
+        .connector = {{
+                          .name   = dt_token("F"),
+                          .type   = dt_token("read"),
+                          .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                          .format = dt_token("f16"),
+                          .roi    = roi[0],
+                          .connected_mi = -1,
+                      },{
+                          .name   = dt_token("G"),
+                          .type   = dt_token("read"),
+                          .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                          .format = dt_token("f16"),
+                          .roi    = roi[0],
+                          .connected_mi = -1,
+                      },{
+                          .name   = dt_token("off"),
+                          .type   = dt_token("read"),
+                          .chan   = dt_token("rg"),
+                          .format = dt_token("f16"),
+                          .roi    = roi[0],
+                          //.flags  = s_conn_smooth,
+                          .connected_mi = -1,
+                      },{
+                          .name   = dt_token("output"),
+                          .type   = dt_token("write"),
+                          .chan   = dt_token("rg"),
+                          .format = dt_token("f16"),
+                          .roi    = roi[0],
+                      }},
+        .push_constant_size = 2*sizeof(uint32_t),
+        .push_constant = {
+            module->img_param.filters,
+            block,
+        },
+    };
+
+    dt_connector_copy(graph, module, 0, id_warp, 0);
+    CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
+    dt_connector_copy(graph, module, 1, id_warp, 2);
+    dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
+
+    dt_connector_copy(graph, module, 2, id_lk, 0);
+    dt_connector_copy(graph, module, 3, id_lk, 1);
+    CONN(dt_node_connect(graph, id_warp, 4, id_lk, 2));
+    dt_connector_copy(graph, module, 6, id_lk, 3);  // mv
+  }
+
 #if 0
   dt_connector_copy(graph, module, 4, id_off[1], 3);  // lo res mask
   graph->node[id_off[1]].connector[3].roi = roi[2];   // XXX FIXME: connector_copy should probably respect ROI
