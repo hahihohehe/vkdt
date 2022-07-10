@@ -13,19 +13,19 @@ layout(push_constant, std140) uniform push_t
   int  scale;
 } push;
 
-layout( // input buffer rggb
+layout( // input buffer rggb / rgba
 set = 1, binding = 0
 ) uniform sampler2D F_in;
 
-layout( // input buffer rggb
+layout( // input buffer rggb / rgba
 set = 1, binding = 1
 ) uniform sampler2D G_in;
 
-layout( // input buffer rggb
+layout( // motion vectors rg
 set = 1, binding = 2
 ) uniform sampler2D off_in;
 
-layout( // output buffer gray scale
+layout( // output motion vectors
 set = 1, binding = 3
 ) uniform writeonly image2D off_out;
 
@@ -40,29 +40,73 @@ main()
   vec2 change = vec2(0, 0);
   float divisor = 0;
 
-  // this stategy only works for demosaiced input
-  for (int i = -1; i <= 1; i++)
+  if (push.scale == 0)
   {
-    for (int j = -1; j <= 1; j++)
+    // this stategy only works for demosaiced input
+    for (int i = -1; i <= 1; i++)
     {
-      ivec2 displ = ivec2(i, j);
-      float G = length(texelFetch(G_in, ipos + displ, 0).rgb);
-      float F = length(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
+      for (int j = -1; j <= 1; j++)
+      {
+        ivec2 displ = ivec2(i, j);
+        float G = length(texelFetch(G_in, ipos + displ, 0).rgb);
+        float F = length(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
 
-      // strategy for calculating I_F needs to be replaced for bayer mosaic
-      float F_1 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k), 0).rgb);
-      float F_2 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 0), 0).rgb);
-      float F_3 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(0, 1), 0).rgb);
-      float F_4 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 1), 0).rgb);
+        // strategy for calculating I_F needs to be replaced for bayer mosaic
+        float F_1 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k), 0).rgb);
+        float F_2 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 0), 0).rgb);
+        float F_3 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(0, 1), 0).rgb);
+        float F_4 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 1), 0).rgb);
 
-      vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
+        vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
 
-      vec2 I_F = vec2((F_2 - F_1) * (1 - sub.y) + (F_4 - F_3) * sub.y, (F_3 - F_1) * (1 - sub.y) + (F_4 - F_2) * sub.y);
-      //vec2 I_F = vec2(3, 3);
+        vec2 I_F = vec2((F_2 - F_1) * (1 - sub.y) + (F_4 - F_3) * sub.y, (F_3 - F_1) * (1 - sub.y) + (F_4 - F_2) * sub.y);
+        //vec2 I_F = vec2(3, 3);
 
-      change += I_F * (G - F);
-      //change += I_F;
-      divisor += dot(I_F, I_F);
+        change += I_F * (G - F);
+        //change += I_F;
+        divisor += dot(I_F, I_F);
+      }
+    }
+  }
+  else  // raw input
+  {   // this implementation is for bayer pattern only
+    for (int i = -2; i <= 2; i++)
+    {
+      for (int j = -2; j <= 2; j++)
+      {
+        ivec2 displ = ivec2(i, j);
+        float G = length(texelFetch(G_in, ipos + displ, 0).rgb);
+        float F = length(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
+
+        // middle of 9 x 9 block
+        ivec2 mid_pos = ivec2(/*vec2(.5, .5) +*/ ipos + displ + h_k);
+
+        // strategy for calculating I_F needs to be replaced for bayer mosaic
+        float F_1 = length(texelFetch(F_in, mid_pos + ivec2(-1, -1), 0).rgb);
+        float F_2 = length(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
+        float F_3 = length(texelFetch(F_in, mid_pos + ivec2(1, -1), 0).rgb);
+        float F_4 = length(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
+        float F_5 = length(texelFetch(F_in, mid_pos + ivec2(0, 0), 0).rgb);
+        float F_6 = length(texelFetch(F_in, mid_pos + ivec2(0, 1), 0).rgb);
+        float F_7 = length(texelFetch(F_in, mid_pos + ivec2(1, -1), 0).rgb);
+        float F_8 = length(texelFetch(F_in, mid_pos + ivec2(1, 0), 0).rgb);
+        float F_9 = length(texelFetch(F_in, mid_pos + ivec2(1, 1), 0).rgb);
+
+        float v_1 = F_1 - F_7;
+        float v_2 = F_2 - F_8;
+        float v_3 = F_3 - F_9;
+        float h_1 = F_1 - F_3;
+        float h_2 = F_4 - F_6;
+        float h_3 = F_7 - F_9;
+
+        vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
+
+        vec2 I_F = vec2(h_2 + mix(v_3, v_1, sub.y), v_2 + mix(v_3, v_1, sub.x));
+        I_F /= 2;
+
+        change += I_F * (G - F);
+        divisor += dot(I_F, I_F);
+      }
     }
   }
 
