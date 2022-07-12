@@ -245,8 +245,8 @@ void modify_roi_out(
   rawinput_buf_t *mod_data = (rawinput_buf_t *)mod->data;
   rawspeed::iPoint2D dim_uncropped = mod_data->d->mRaw->getUncroppedDim();
   // we know we only have one connector called "output" (see our "connectors" file)
-  mod->connector[0].roi.full_wd = dim_uncropped.x;
-  mod->connector[0].roi.full_ht = dim_uncropped.y;
+  mod->connector[0].roi.full_wd = dim_uncropped.x / 10;
+  mod->connector[0].roi.full_ht = dim_uncropped.y / 10;
 
   // TODO: data type, channels, bpp
 
@@ -293,6 +293,11 @@ void modify_roi_out(
 
   // dimensions of cropped image (cut away black borders for noise estimation)
   rawspeed::iPoint2D dimCropped = mod_data->d->mRaw->dim;
+  rawspeed::iPoint2D dimUncropped = mod_data->d->mRaw->getUncroppedDim();
+  rawspeed::iPoint2D dimUncroppedAdjusted = mod_data->d->mRaw->getUncroppedDim();
+  dimUncroppedAdjusted.x /= 10;
+  dimUncroppedAdjusted.y /= 10;
+  dimCropped = dimUncroppedAdjusted + dimCropped - dimUncropped;
   rawspeed::iPoint2D cropTL = mod_data->d->mRaw->getCropOffset();
   mod->img_param.crop_aabb[0] = cropTL.x;
   mod->img_param.crop_aabb[1] = cropTL.y;
@@ -454,6 +459,11 @@ int read_source(
   int oy = mod_data->oy;
   wd -= ox;
   ht -= oy;
+
+  // only one tenth
+  wd /= 10;
+  ht /= 10;
+
   // round down to full block size:
   const int block = mod->img_param.filters == 9u ? 3 : 2;
   wd = (wd/block)*block;
