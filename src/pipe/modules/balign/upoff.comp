@@ -1,0 +1,33 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout( // input buffer, offsets
+    set = 1, binding = 0
+) uniform sampler2D img_in;
+
+layout( // output buffer offsets
+    set = 1, binding = 1
+) uniform writeonly image2D img_out;
+
+layout( // output buffer offsets
+set = 1, binding = 2
+) uniform writeonly image2D mask_out;
+
+// input offsets spread out to 32 x 32 pixels (from internal low-res to external full res (same res as raw input))
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos / 32, imageSize(img_out)))) return;
+
+  vec4 off = texelFetch(img_in, ipos / 32, 0);
+
+  imageStore(img_out, ipos, off);
+
+  imageStore(mask_out, ipos, vec4(.5, .5, .5, .5));
+}

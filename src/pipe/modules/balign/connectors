@@ -1,0 +1,4 @@
+input:read:*:*
+output:write:rg:f16
+ref:read:*:*
+mask:write:y:f16
