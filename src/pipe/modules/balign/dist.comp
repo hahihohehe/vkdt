@@ -49,28 +49,28 @@ main()
 
   ivec2 tile_start = tile_size * ipos;
 
-  float min_dist = 1000000;   // should be high enough
+  double min_dist = 1000000000;   // should be high enough
   vec2 best_off = vec2(0, 0);
   for (int i = -win_size; i <= win_size; i++)
   {
     for (int j = -win_size; j <= win_size; j++)
     {
-      float i0 = texelFetch(img_in0, tile_start + ivec2(i, j), 0).r;
-      float i1;
-      float dist = 0;
+      double dist = 0;
       vec2 off = vec2(0, 0);
       if (push.it < 3)
       {
-        off = vec2(i, j) + texture(img_off, (ipos/last_upscale +.5)/textureSize(img_off, 0)).rg * last_upscale;
+        off = vec2(i, j) + texture(img_off, (ipos +.5)/textureSize(img_off, 0)).rg * last_upscale;
       }
       for (int x = 0; x < tile_size; x++)
       {
         for (int y = 0; y < tile_size; y++)
         {
-          i1 = texelFetch(img_in1, tile_start + ivec2(x, y) + ivec2(off), 0).r;
+          float i0 = texelFetch(img_in0, tile_start + ivec2(x, y), 0).r;
+          float i1 = texelFetch(img_in1, tile_start + ivec2(x, y) + ivec2(off), 0).r;
 
           // calculate distance
-          dist = abs(i0 - i1);  // L1
+          //dist += abs(i0 - i1);  // L1
+          dist += (i0 - i1) * (i0 - i1);  // L2
         }
       }
 

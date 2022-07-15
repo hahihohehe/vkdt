@@ -28,6 +28,7 @@ main()
   vec4 off = texelFetch(img_in, ipos / 32, 0);
 
   imageStore(img_out, ipos, off);
+  //imageStore(img_out, ipos, vec4(0, 0, 0, 0));
 
   imageStore(mask_out, ipos, vec4(.5, .5, .5, .5));
 }

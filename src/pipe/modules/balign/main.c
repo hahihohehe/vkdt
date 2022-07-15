@@ -182,6 +182,8 @@ create_nodes(
             .format = dt_token("f16"),
             .roi    = roi_off[k+1],
         }},
+        .push_constant_size = 1*sizeof(uint32_t),
+        .push_constant = { k },
     };
 
     CONN(dt_node_connect(graph, id_down[0][k], 1, id_off[k], 0));
