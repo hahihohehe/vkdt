@@ -224,6 +224,8 @@ check_params(
   return s_graph_run_record_cmd_buf;
 }
 
+#define SIZE_DIV 4
+
 // this callback is responsible to set the full_{wd,ht} dimensions on the
 // regions of interest on all "write"|"source" channels
 void modify_roi_out(
@@ -245,8 +247,8 @@ void modify_roi_out(
   rawinput_buf_t *mod_data = (rawinput_buf_t *)mod->data;
   rawspeed::iPoint2D dim_uncropped = mod_data->d->mRaw->getUncroppedDim();
   // we know we only have one connector called "output" (see our "connectors" file)
-  mod->connector[0].roi.full_wd = dim_uncropped.x / 10;
-  mod->connector[0].roi.full_ht = dim_uncropped.y / 10;
+  mod->connector[0].roi.full_wd = dim_uncropped.x / SIZE_DIV;
+  mod->connector[0].roi.full_ht = dim_uncropped.y / SIZE_DIV;
 
   // TODO: data type, channels, bpp
 
@@ -295,8 +297,8 @@ void modify_roi_out(
   rawspeed::iPoint2D dimCropped = mod_data->d->mRaw->dim;
   rawspeed::iPoint2D dimUncropped = mod_data->d->mRaw->getUncroppedDim();
   rawspeed::iPoint2D dimUncroppedAdjusted = mod_data->d->mRaw->getUncroppedDim();
-  dimUncroppedAdjusted.x /= 10;
-  dimUncroppedAdjusted.y /= 10;
+  dimUncroppedAdjusted.x /= SIZE_DIV;
+  dimUncroppedAdjusted.y /= SIZE_DIV;
   dimCropped = dimUncroppedAdjusted + dimCropped - dimUncropped;
   rawspeed::iPoint2D cropTL = mod_data->d->mRaw->getCropOffset();
   mod->img_param.crop_aabb[0] = cropTL.x;
@@ -461,8 +463,8 @@ int read_source(
   ht -= oy;
 
   // only one tenth
-  wd /= 10;
-  ht /= 10;
+  wd /= SIZE_DIV;
+  ht /= SIZE_DIV;
 
   // round down to full block size:
   const int block = mod->img_param.filters == 9u ? 3 : 2;
