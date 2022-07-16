@@ -45,16 +45,16 @@ layout( // input weights
 set = 1, binding = 4
 ) uniform sampler2D cont_in;
 
-/*layout( // gradients
+layout( // gradients
 set = 1, binding = 5
-) uniform sampler2D grad;*/
+) uniform sampler2D grad;
 
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 5
+    set = 1, binding = 6
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 6
+set = 1, binding = 7
 ) uniform writeonly image2D cont_out;
 
 #define M_PI 3.14159265358979
@@ -66,10 +66,57 @@ vec4 cov, vec2 off,
 out float weight)
 {
   dvec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
-  dmat2 E = dmat2(cov.z, -cov.w,
-                cov.w,  cov.z);
+  dmat2 E = dmat2(cov.z, cov.w,
+                -cov.w,  cov.z);
   dvec2 of = E * off;
-  weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1.0);
+  weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1);
+}
+
+void grad_proc(
+    vec2 grad,
+    vec2 off,
+    out float weight)
+{
+  mat2 O = mat2(grad.x * grad.x, grad.x * grad.y,
+                grad.x * grad.y, grad.y * grad.y);
+  vec2 eval;
+  vec2 evec0;
+  vec2 evec1;
+  evd2x2(eval, evec0, evec1, O);
+
+  float l1 = eval.x;
+  float l2 = eval.y;
+
+  if (l2 > l1)
+  { // swap
+    l1 = eval.y;
+    l2 = eval.x;
+    vec2 tmp = evec0;
+    evec0 = evec1;
+    evec1 = tmp;
+  }
+
+  // configuration parameters
+  float k_detail = 0.2;
+  float k_denoise = 3;
+  float k_stretch = 4;
+  float k_shrink = 2;
+  float D_th = 0.005;
+  float D_tr = 0.01;
+
+  float A = clamp(1 + sqrt(l1 / l2), 1, 10);
+  float D = clamp(1 - sqrt(l1) / D_tr + D_th, 0, 1);
+  D = 0;
+  float k1_ = k_detail * k_stretch * A;
+  float k2_ = k_detail / (k_shrink * A);
+  float k1 = ((1 - D) * k1_ + D * k_detail * k_denoise);
+  k1 *= k1;
+  float k2 = ((1 - D) * k2_ + D * k_detail * k_denoise);
+  k2 *= k2;
+
+  vec4 cov = vec4(k1, k2, evec0);
+
+  eval_gauss(cov, off, weight);
 }
 
 vec4
@@ -114,6 +161,8 @@ main()
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
 
+  vec2 grad = texelFetch(off, spos, 0).xy;
+
   // TODO: support rgb and xtrans input
   vec4 acc_old = texelFetch(acc_in, ipos, 0);
   vec4 wsum_old = texelFetch(cont_in, ipos, 0);
@@ -144,7 +193,8 @@ main()
           vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
-          eval_gauss(cov, actualsourcepos - epos, weight);
+          // eval_gauss(cov, actualsourcepos - epos, weight);
+          grad_proc(grad, actualsourcepos - epos, weight);
 
 
           if (push.filters == 0)

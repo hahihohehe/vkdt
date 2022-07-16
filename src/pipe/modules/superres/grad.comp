@@ -1,0 +1,49 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout( // input buffer rggb / rgba
+set = 1, binding = 0
+) uniform sampler2D img_in;
+
+layout( // output gradients
+set = 1, binding = 1
+) uniform writeonly image2D grad_out;
+
+float lum(vec3 rgb)
+{
+  return dot(rgb, vec3(.333, .333, .333));
+}
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(grad_out)))) return;
+
+  // strategy for calculating I_F needs to be replaced for bayer mosaic
+  float F_1 = lum(texelFetch(img_in, ipos + ivec2(-1, -1), 0).rgb);
+  float F_2 = lum(texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb);
+  float F_3 = lum(texelFetch(img_in, ipos + ivec2(1, -1), 0).rgb);
+  float F_4 = lum(texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb);
+  float F_5 = lum(texelFetch(img_in, ipos + ivec2(0, 0), 0).rgb);
+  float F_6 = lum(texelFetch(img_in, ipos + ivec2(0, 1), 0).rgb);
+  float F_7 = lum(texelFetch(img_in, ipos + ivec2(1, -1), 0).rgb);
+  float F_8 = lum(texelFetch(img_in, ipos + ivec2(1, 0), 0).rgb);
+  float F_9 = lum(texelFetch(img_in, ipos + ivec2(1, 1), 0).rgb);
+
+  float v_1 = F_1 - F_7;
+  float v_2 = F_2 - F_8;
+  float v_3 = F_3 - F_9;
+  float h_1 = F_1 - F_3;
+  float h_2 = F_4 - F_6;
+  float h_3 = F_7 - F_9;
+
+  vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
+
+  imageStore(grad_out, ipos, vec4(I_F, I_F));
+}

@@ -28,16 +28,16 @@ layout( // input rggb original
     set = 1, binding = 0
 ) uniform sampler2D img;
 
-/*layout( // gradients
+layout( // gradients
 set = 1, binding = 1
-) uniform sampler2D grad;*/
+) uniform sampler2D grad;
 
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 1
+    set = 1, binding = 2
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 2
+set = 1, binding = 3
 ) uniform writeonly image2D cont_out;
 
 #define M_PI 3.14159265358979
@@ -52,7 +52,7 @@ out float weight)
   mat2 E = mat2(cov.z, -cov.w,
                 cov.w,  cov.z);
   vec2 of = E * off;
-  weight = clamp(exp(-0.5*dot(of/eval, of)), 1e-4, 1.0);
+  weight = clamp(exp(-0.5*dot(of/eval, of)), 1e-4, 1);
 }
 
 vec4

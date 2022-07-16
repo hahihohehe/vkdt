@@ -62,6 +62,36 @@ create_nodes(
     dt_roi_t *ro = &module->connector[OUTPUT].roi;
 
     assert(graph->num_nodes < graph->max_nodes);
+    int id_grad = graph->num_nodes++;
+    dt_node_t *node_grad = graph->node + id_grad;
+    *node_grad = (dt_node_t) {
+        .name   = dt_token("superres"),
+        .kernel = dt_token("grad"),
+        .module = module,
+        .wd     = ri->wd,
+        .ht     = ri->ht,
+        .dp     = 1,
+        .num_connectors = 2,
+        .connector = {{
+                          .name   = dt_token("img"),
+                          .type   = dt_token("read"),
+                          .chan   = dt_token("rggb"),
+                          .format = dt_token("*"),
+                          .roi    = *ri,
+                          .connected_mi = -1,
+                      },
+                      {
+                          .name   = dt_token("grad"),
+                          .type   = dt_token("write"),
+                          .chan   = dt_token("rg"),
+                          .format = dt_token("f16"),
+                          .roi    = *ri,
+                      }},
+    };
+    dt_connector_copy(graph, module, 0, id_grad, 0);
+
+
+    assert(graph->num_nodes < graph->max_nodes);
     const int id_cf = graph->num_nodes++;
     dt_node_t *node_cf = graph->node + id_cf;
     *node_cf = (dt_node_t) {
@@ -80,14 +110,14 @@ create_nodes(
                                   .roi    = *ri,
                                   .connected_mi = -1,
                           },
-                          /*{
+                          {
                                   .name   = dt_token("grad"),
                                   .type   = dt_token("read"),
                                   .chan   = dt_token("rg"),
                                   .format = dt_token("f16"),
-                                  .roi    = module->connector[0].roi,
+                                  .roi    = *ri,
                                   .connected_mi = -1,
-                          },*/
+                          },
                           {
                                   .name   = dt_token("acc"),
                                   .type   = dt_token("write"),
@@ -108,6 +138,7 @@ create_nodes(
             },
     };
     dt_connector_copy(graph, module, 0, id_cf, 0);
+    CONN(dt_node_connect(graph, id_grad, 1, id_cf, 1));     // grad
 
     int num_connected = 0;
     int id_combine_prev;
@@ -117,6 +148,35 @@ create_nodes(
         if(module->connector[1+3*i].connected_mi >= 0 &&
            module->connector[1+3*i].connected_mc >= 0)
         {
+            assert(graph->num_nodes < graph->max_nodes);
+            id_grad = graph->num_nodes++;
+            dt_node_t *node_grad = graph->node + id_grad;
+            *node_grad = (dt_node_t) {
+              .name   = dt_token("superres"),
+              .kernel = dt_token("grad"),
+              .module = module,
+              .wd     = ri->wd,
+              .ht     = ri->ht,
+              .dp     = 1,
+              .num_connectors = 2,
+              .connector = {{
+                                .name   = dt_token("img"),
+                                .type   = dt_token("read"),
+                                .chan   = dt_token("rggb"),
+                                .format = dt_token("*"),
+                                .roi    = *ri,
+                                .connected_mi = -1,
+                            },
+                            {
+                                .name   = dt_token("grad"),
+                                .type   = dt_token("write"),
+                                .chan   = dt_token("rg"),
+                                .format = dt_token("f16"),
+                                .roi    = *ri,
+                            }},
+            };
+            dt_connector_copy(graph, module, 1+3*i, id_grad, 0);
+
             assert(graph->num_nodes < graph->max_nodes);
             const int id_combine = graph->num_nodes++;
             dt_node_t *node_combine = graph->node + id_combine;
@@ -165,14 +225,14 @@ create_nodes(
                                           .roi    = *ro,
                                           .connected_mi = -1,
                                   },
-                                  /*{
+                                  {
                                           .name   = dt_token("grad"),
                                           .type   = dt_token("read"),
                                           .chan   = dt_token("rg"),
                                           .format = dt_token("f16"),
-                                          .roi    = module->connector[0].roi,
+                                          .roi    = *ri,
                                           .connected_mi = -1,
-                                  },*/
+                                  },
                                   {
                                           .name   = dt_token("acc"),
                                           .type   = dt_token("write"),
@@ -194,16 +254,18 @@ create_nodes(
                     },
             };
 
+            // connect grad
+            CONN(dt_node_connect(graph, id_grad, 1, id_combine, 5));     // grad
             // connect to previous node
             if (num_connected == 0)
             {       // this is the first combine node after cf
-                CONN(dt_node_connect(graph, id_cf, 1, id_combine, 3));     // acc
-                CONN(dt_node_connect(graph, id_cf, 2, id_combine, 4));     // cont
+                CONN(dt_node_connect(graph, id_cf, 2, id_combine, 3));     // acc
+                CONN(dt_node_connect(graph, id_cf, 3, id_combine, 4));     // cont
             }
             else
             {
-                CONN(dt_node_connect(graph, id_combine_prev, 5, id_combine, 3));     // acc
-                CONN(dt_node_connect(graph, id_combine_prev, 6, id_combine, 4));     // cont
+                CONN(dt_node_connect(graph, id_combine_prev, 6, id_combine, 3));     // acc
+                CONN(dt_node_connect(graph, id_combine_prev, 7, id_combine, 4));     // cont
             }
             // connect align inputs
             dt_connector_copy(graph, module, 1+3*i, id_combine, 0);     // img
@@ -260,13 +322,13 @@ create_nodes(
     };
     if (num_connected == 0)
     {   // only reference image connected
-        CONN(dt_node_connect(graph, id_cf, 1, id_norm, 0));     // acc
-        CONN(dt_node_connect(graph, id_cf, 2, id_norm, 1));     // cont
+        CONN(dt_node_connect(graph, id_cf, 2, id_norm, 0));     // acc
+        CONN(dt_node_connect(graph, id_cf, 3, id_norm, 1));     // cont
     }
     else
     {
-        CONN(dt_node_connect(graph, id_combine_prev, 5, id_norm, 0));     // acc
-        CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 1));     // cont
+        CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 0));     // acc
+        CONN(dt_node_connect(graph, id_combine_prev, 7, id_norm, 1));     // cont
     }
 
     if (1 || module->connector[OUTPUT].roi.scale == 1.0) {
