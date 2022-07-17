@@ -6,3 +6,8 @@ ani:slider:0.0:1.0
 mask:slider:0.0:1.0
 off:slider:-1.0:1.0
 image:slider:-1:10
+k_det:slider:0:2
+k_den:slider:0:4
+k_stret:slider:0:10
+k_shri:slider:0:10
+gauss:slider:0:1

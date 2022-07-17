@@ -23,6 +23,11 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float mask;
   float off;
   int image;
+  float k_det;
+  float k_den;
+  float k_stret;
+  float k_shri;
+  int gauss;
 } params;
 
 layout( // input rggb original
@@ -47,7 +52,7 @@ set = 1, binding = 4
 
 layout( // gradients
 set = 1, binding = 5
-) uniform sampler2D grad;
+) uniform sampler2D grad_in;
 
 layout( // output f16 rgb accumulation buffer
     set = 1, binding = 6
@@ -66,8 +71,8 @@ vec4 cov, vec2 off,
 out float weight)
 {
   dvec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
-  dmat2 E = dmat2(cov.z, cov.w,
-                -cov.w,  cov.z);
+  dmat2 E = dmat2(cov.z, -cov.w,
+                cov.w,  cov.z);
   dvec2 of = E * off;
   weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1);
 }
@@ -84,6 +89,11 @@ void grad_proc(
   vec2 evec1;
   evd2x2(eval, evec0, evec1, O);
 
+  // test values:
+  eval = vec2(4, 1);
+  evec0 = vec2(1, 0);
+  evec1 = vec2(0, -1);
+
   float l1 = eval.x;
   float l2 = eval.y;
 
@@ -97,16 +107,20 @@ void grad_proc(
   }
 
   // configuration parameters
-  float k_detail = 0.2;
+  /*float k_detail = 0.2;
   float k_denoise = 3;
   float k_stretch = 4;
-  float k_shrink = 2;
+  float k_shrink = 2;*/
+  float k_detail = params.k_det;
+  float k_denoise = params.k_den;
+  float k_stretch = params.k_stret;
+  float k_shrink = params.k_shri;
   float D_th = 0.005;
   float D_tr = 0.01;
 
   float A = clamp(1 + sqrt(l1 / l2), 1, 10);
   float D = clamp(1 - sqrt(l1) / D_tr + D_th, 0, 1);
-  D = 0;
+  //D = 0;
   float k1_ = k_detail * k_stretch * A;
   float k2_ = k_detail / (k_shrink * A);
   float k1 = ((1 - D) * k1_ + D * k_detail * k_denoise);
@@ -143,7 +157,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 3   // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 3  // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -157,11 +171,13 @@ main()
   // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
   vec2 epos = vec2(ipos) / res;   // effective position
   ivec2 spos = ivec2(epos + vec2(.5, .5));
-  epos += params.off * texelFetch(off, spos, 0).xy;
+
+  if (params.gauss <= 0)
+    epos += params.off * texelFetch(off, spos, 0).xy;
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
 
-  vec2 grad = texelFetch(off, spos, 0).xy;
+  vec2 grad = texelFetch(grad_in, spos, 0).xy;
 
   // TODO: support rgb and xtrans input
   vec4 acc_old = texelFetch(acc_in, ipos, 0);
@@ -193,25 +209,36 @@ main()
           vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+
+          vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
           // eval_gauss(cov, actualsourcepos - epos, weight);
-          grad_proc(grad, actualsourcepos - epos, weight);
+          grad_proc(grad, vec2(i, j) - sub, weight);
 
 
-          if (push.filters == 0)
+          if (params.gauss > 0)
           {
-            // Debug gaussians
-            // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
-            acc += weight * texelFetch(img, sourcepos, 0);
-            wsum += weight * vec4(1, 1, 1, 0);
+            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            acc += weight * vec4(1, 1, 1, 0);
+            wsum += 1 * vec4(1, 1, 1, 0);
           }
-          else {
-            float intensity = texelFetch(img, sourcepos, 0).r;
+          else
+          {
+            if (push.filters == 0)
+            {
+              // Debug gaussians
+              // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+              acc += weight * texelFetch(img, sourcepos, 0);
+              wsum += weight * vec4(1, 1, 1, 0);
+            }
+            else {
+              float intensity = texelFetch(img, sourcepos, 0).r;
 
-            // Debug gaussians
-            // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+              // Debug gaussians
+              // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
 
-            acc += weight * intensity * color_vec(sourcepos);
-            wsum += weight * color_vec(sourcepos);
+              acc += weight * intensity * color_vec(sourcepos);
+              wsum += weight * color_vec(sourcepos);
+            }
           }
         }
       }
