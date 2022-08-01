@@ -34,7 +34,7 @@ float lum(vec3 rgb)
   return dot(rgb, vec3(.333, .333, .333));
 }
 
-#define PATCH_RAD 3
+#define PATCH_RAD 1
 
 void
 main()
@@ -47,7 +47,7 @@ main()
   vec2 change = vec2(0, 0);
   float divisor = 0;
 
-  if (push.scale == 0)
+  if (false && push.scale == 0)
   {
     // this stategy only works for demosaiced input
     for (int i = -1; i <= 1; i++)
@@ -89,7 +89,7 @@ main()
         ivec2 mid_pos = ivec2(/*vec2(.5, .5) +*/ ipos + displ + h_k);
 
         // strategy for calculating I_F needs to be replaced for bayer mosaic
-        float F_1 = lum(texelFetch(F_in, mid_pos + ivec2(-1, -1), 0).rgb);
+        /*float F_1 = lum(texelFetch(F_in, mid_pos + ivec2(-1, -1), 0).rgb);
         float F_2 = lum(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
         float F_3 = lum(texelFetch(F_in, mid_pos + ivec2(1, -1), 0).rgb);
         float F_4 = lum(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
@@ -108,16 +108,31 @@ main()
 
         vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
 
-        vec2 I_F = vec2(h_2 + mix(v_3, v_1, sub.y), v_2 + mix(v_3, v_1, sub.x));
-        I_F /= 2;
+        vec2 I_F = vec2(h_2 + mix(h_3, h_1, sub.y), v_2 + mix(v_3, v_1, sub.x));
+        I_F /= 2;*/
+
+        // alternative strategy
+        float F_1 = lum(texelFetch(F_in, mid_pos + ivec2(0, 1), 0).rgb);
+        float F_2 = lum(texelFetch(F_in, mid_pos + ivec2(1, 0), 0).rgb);
+        float F_3 = lum(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
+        float F_4 = lum(texelFetch(F_in, mid_pos + ivec2(-1, 0), 0).rgb);
+
+        vec2 I_F = .5 * vec2(F_2 - F_4, F_1 - F_3);
+
+
+        I_F *= vec2(1, 1);
 
         change += I_F * (G - F);
+        // divisor += clamp(dot(I_F, I_F), .5, 20);   // lower bound is to prevent huge steps
         divisor += dot(I_F, I_F);
       }
     }
   }
 
-  //change /= divisor;
+  change /= divisor;
+
+  change = clamp(change, -.5, .5);
+
   vec2 h_k1 = h_k + 1 * change;
 
   imageStore(off_out, ipos, vec4(h_k1, h_k1));
