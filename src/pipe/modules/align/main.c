@@ -78,6 +78,8 @@ create_nodes(
 #else // full res
   const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
 #endif
+
+#ifndef DT_NO_ALIGN
   for(int i=1;i<=NUM_LEVELS;i++)
   {
     int scale = i == 1 ? block : DOWN;
@@ -487,4 +489,121 @@ create_nodes(
   dt_connector_copy(graph, module, 4, id_mask, 3);
 #endif
 #undef NUM_LEVELS
+#else
+    assert(graph->num_nodes < graph->max_nodes);
+    const int id_debug = graph->num_nodes++;
+    graph->node[id_debug] = (dt_node_t) {
+            .name   = dt_token("align"),
+            .kernel = dt_token("debug"),
+            .module = module,
+            .wd     = module->connector[0].roi.wd,
+            .ht     = module->connector[0].roi.ht,
+            .dp     = 1,
+            .num_connectors = 4,
+            .connector = {{
+                              .name   = dt_token("dummy"),
+                              .type   = dt_token("read"),
+                              .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                              .format = dt_token("f16"),
+                              .roi    = module->connector[0].roi,
+                          },
+                          {
+                                  .name   = dt_token("off"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[0].roi,
+                          },
+                          {
+                                  .name   = dt_token("img_out"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[0].roi,
+                          },
+                          {
+                                  .name   = dt_token("mask"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("y"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[0].roi,
+                          }},
+    };
+
+    dt_connector_copy(graph, module, 2, id_debug, 0);
+    dt_connector_copy(graph, module, 1, id_debug, 2);
+    dt_connector_copy(graph, module, 5, id_debug, 2);
+    dt_connector_copy(graph, module, 4, id_debug, 3);
+
+    int last_lk;
+    for (int i = 0; i < lk_r; i++) {
+        assert(graph->num_nodes < graph->max_nodes);
+        const int id_lk = graph->num_nodes++;
+        graph->node[id_lk] = (dt_node_t) {
+                .name   = dt_token("align"),
+                .kernel = dt_token("lk"),
+                .module = module,
+                .wd     = module->connector[0].roi.wd,
+                .ht     = module->connector[0].roi.ht,
+                .dp     = 1,
+                .num_connectors = 5,
+                .connector = {{
+                                      .name   = dt_token("F"),
+                                      .type   = dt_token("read"),
+                                      .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                                      .format = dt_token("f16"),
+                                      .roi    = module->connector[0].roi,
+                                      .connected_mi = -1,
+                              },
+                              {
+                                      .name   = dt_token("G"),
+                                      .type   = dt_token("read"),
+                                      .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                                      .format = dt_token("f16"),
+                                      .roi    = module->connector[0].roi,
+                                      .connected_mi = -1,
+                              },
+                              {
+                                      .name   = dt_token("off"),
+                                      .type   = dt_token("read"),
+                                      .chan   = dt_token("rg"),
+                                      .format = dt_token("f16"),
+                                      .roi    = module->connector[0].roi,
+                                      //.flags  = s_conn_smooth,
+                                      .connected_mi = -1,
+                              },
+                              {
+                                      .name   = dt_token("output"),
+                                      .type   = dt_token("write"),
+                                      .chan   = dt_token("rg"),
+                                      .format = dt_token("f16"),
+                                      .roi    = module->connector[0].roi,
+                              }},
+                .push_constant_size = 2 * sizeof(uint32_t),
+                .push_constant = {
+                        module->img_param.filters,
+                        block,
+                },
+        };
+
+        if (i == 0)
+        {
+            CONN(dt_node_connect(graph, id_debug, 1, id_lk, 2)); // mv
+        }
+        else {
+            CONN(dt_node_connect(graph, last_lk, 3, id_lk, 2)); // pass on mv
+        }
+
+        // input images
+        dt_connector_copy(graph, module, 2, id_lk, 0);
+        dt_connector_copy(graph, module, 3, id_lk, 1);
+
+        if (i + 1 == lk_r)
+        {
+            dt_connector_copy(graph, module, 6, id_lk, 3);  // mv output
+        }
+
+        last_lk = id_lk;
+    }
+#endif
 }
