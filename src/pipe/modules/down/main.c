@@ -14,14 +14,16 @@ void modify_roi_out(
     dt_module_t *module)
 {
   const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
-  const int p_down = *dt_module_param_int(module, 0);
+  int p_down = *dt_module_param_int(module, 0);
 
-  module->connector[1].roi.full_wd = module->connector[0].roi.full_wd / (p_down * block);
-  module->connector[1].roi.full_ht = module->connector[0].roi.full_ht / (p_down * block);
+  module->connector[1].roi.full_wd = module->connector[0].roi.full_wd / (p_down);
+  module->connector[1].roi.full_ht = module->connector[0].roi.full_ht / (p_down);
+  //module->connector[1].roi.full_wd = module->connector[0].roi.full_wd / (4);
+  // module->connector[1].roi.full_ht = module->connector[0].roi.full_ht / (4);
 
-  //module->connector[1].roi.wd = module->connector[1].roi.full_wd;
-  //module->connector[1].roi.ht = module->connector[1].roi.full_ht;
-  //module->connector[1].roi.scale = 1;
+  module->connector[1].roi.wd = module->connector[1].roi.full_wd;
+  module->connector[1].roi.ht = module->connector[1].roi.full_ht;
+  module->connector[1].roi.scale = 1;
 }
 
 dt_graph_run_t check_params(

@@ -38,7 +38,7 @@ main()
   {
     for (int j = 0; j < params.down; j++)
     {
-      ivec2 spos = params.down * push.block * block_pos + ivec2(i, j) * push.block + off;
+      ivec2 spos = params.down * block_pos + ivec2(i, j) * push.block + off;
       col += texelFetch(img_in, spos, 0).rgb;
     }
   }
