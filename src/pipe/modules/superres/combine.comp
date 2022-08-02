@@ -27,6 +27,8 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float k_den;
   float k_stret;
   float k_shri;
+  float d_th;
+  float d_tr;
   int gauss;
 } params;
 
@@ -90,9 +92,9 @@ void grad_proc(
   evd2x2(eval, evec0, evec1, O);
 
   // test values:
-  eval = vec2(4, 1);
+  /*eval = vec2(4, 1);
   evec0 = vec2(1, 0);
-  evec1 = vec2(0, -1);
+  evec1 = vec2(0, -1);*/
 
   float l1 = eval.x;
   float l2 = eval.y;
@@ -115,12 +117,12 @@ void grad_proc(
   float k_denoise = params.k_den;
   float k_stretch = params.k_stret;
   float k_shrink = params.k_shri;
-  float D_th = 0.005;
-  float D_tr = 0.01;
+  float D_th = params.d_th;
+  float D_tr = params.d_tr;
 
   float A = clamp(1 + sqrt(l1 / l2), 1, 10);
   float D = clamp(1 - sqrt(l1) / D_tr + D_th, 0, 1);
-  //D = 0;
+  // D = 0;
   float k1_ = k_detail * k_stretch * A;
   float k2_ = k_detail / (k_shrink * A);
   float k1 = ((1 - D) * k1_ + D * k_detail * k_denoise);
@@ -128,9 +130,8 @@ void grad_proc(
   float k2 = ((1 - D) * k2_ + D * k_detail * k_denoise);
   k2 *= k2;
 
-  vec4 cov = vec4(k1, k2, evec0);
-
-  eval_gauss(cov, off, weight);
+  vec2 of = vec2(dot(off, evec0), dot(off, evec1));
+  weight = clamp(exp(-0.5*dot(of/vec2(k1, k2), of)), 1e-4, 1);
 }
 
 vec4
@@ -157,7 +158,7 @@ ivec2 ipos
   }
 }
 
-#define SSIZE 3  // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
+#define SSIZE 1  // sample size: sampling box has dimensions 2*SSIZE+1 x 2*SSIZE+1
 
 void
 main()
@@ -176,8 +177,6 @@ main()
     epos += params.off * texelFetch(off, spos, 0).xy;
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
-
-  vec2 grad = texelFetch(grad_in, spos, 0).xy;
 
   // TODO: support rgb and xtrans input
   vec4 acc_old = texelFetch(acc_in, ipos, 0);
@@ -210,10 +209,14 @@ main()
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
 
-          vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
-          // eval_gauss(cov, actualsourcepos - epos, weight);
-          grad_proc(grad, vec2(i, j) - sub, weight);
+          vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
+          vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
+          if (params.sup > 0){
+            eval_gauss(cov, sub - vec2(i, j), weight);
+          } else {
+            grad_proc(grad, vec2(i, j) - sub, weight);
+          }
 
           if (params.gauss > 0)
           {
