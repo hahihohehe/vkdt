@@ -99,15 +99,6 @@ void grad_proc(
   float l1 = eval.x;
   float l2 = eval.y;
 
-  if (l2 > l1)
-  { // swap
-    l1 = eval.y;
-    l2 = eval.x;
-    vec2 tmp = evec0;
-    evec0 = evec1;
-    evec1 = tmp;
-  }
-
   // configuration parameters
   /*float k_detail = 0.2;
   float k_denoise = 3;
