@@ -43,11 +43,10 @@ main()
   float h_2 = F_4 - F_6;
   float h_3 = F_7 - F_9;
 
-  // vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
-  // vec2 I_F = vec2(.5 * h_2, .5 * v_2);
-  vec2 I_F = .5 * vec2(F_6 - F_4, F_8 - F_2);
+  vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
+  // vec2 I_F = .5 * vec2(h_2, v_2);
 
-  I_F *= vec2(1, 1);
+  I_F *= vec2(-1, -1);
 
   imageStore(grad_out, ipos, vec4(I_F, I_F));
 }
