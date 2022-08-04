@@ -61,6 +61,11 @@ main()
   // color reconstruction
   //weight.g *= 2;
   // weight *= 10;
+
+  // Do not boost contribution, only lower them if sum over
+  // contributing frames is greater than 1
+  weight = clamp(weight, 1, 10000);
+
   col /= weight;
   col.a = 1.0;
 
