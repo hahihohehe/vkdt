@@ -122,7 +122,7 @@ void grad_proc(
   k2 *= k2;
 
   vec2 of = vec2(dot(off, evec0), dot(off, evec1));
-  weight = clamp(exp(-0.5*dot(of/vec2(k1, k2), of)), 1e-4, 1);
+  weight = clamp(exp(-0.5*dot(of/vec2(k2, k1), of)), 1e-4, 1);
 }
 
 vec4
@@ -211,7 +211,7 @@ main()
 
           if (params.gauss > 0)
           {
-            if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
+            if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
             acc += weight * vec4(1, 1, 1, 0);
             wsum += 1 * vec4(1, 1, 1, 0);
           }
@@ -219,16 +219,11 @@ main()
           {
             if (push.filters == 0)
             {
-              // Debug gaussians
-              // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
               acc += weight * texelFetch(img, sourcepos, 0);
               wsum += weight * vec4(1, 1, 1, 0);
             }
             else {
               float intensity = texelFetch(img, sourcepos, 0).r;
-
-              // Debug gaussians
-              // if (sourcepos.x % 10 == 0 && sourcepos.y % 10 == 0)
 
               acc += weight * intensity * color_vec(sourcepos);
               wsum += weight * color_vec(sourcepos);

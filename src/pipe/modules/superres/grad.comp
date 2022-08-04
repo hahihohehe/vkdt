@@ -29,11 +29,11 @@ main()
   float F_1 = lum(texelFetch(img_in, ipos + ivec2(-1, -1), 0).rgb);
   float F_2 = lum(texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb);
   float F_3 = lum(texelFetch(img_in, ipos + ivec2(1, -1), 0).rgb);
-  float F_4 = lum(texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb);
+  float F_4 = lum(texelFetch(img_in, ipos + ivec2(-1, 0), 0).rgb);
   float F_5 = lum(texelFetch(img_in, ipos + ivec2(0, 0), 0).rgb);
-  float F_6 = lum(texelFetch(img_in, ipos + ivec2(0, 1), 0).rgb);
-  float F_7 = lum(texelFetch(img_in, ipos + ivec2(1, -1), 0).rgb);
-  float F_8 = lum(texelFetch(img_in, ipos + ivec2(1, 0), 0).rgb);
+  float F_6 = lum(texelFetch(img_in, ipos + ivec2(1, 0), 0).rgb);
+  float F_7 = lum(texelFetch(img_in, ipos + ivec2(-1, 1), 0).rgb);
+  float F_8 = lum(texelFetch(img_in, ipos + ivec2(0, 1), 0).rgb);
   float F_9 = lum(texelFetch(img_in, ipos + ivec2(1, 1), 0).rgb);
 
   float v_1 = F_1 - F_7;
@@ -44,9 +44,10 @@ main()
   float h_3 = F_7 - F_9;
 
   // vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
-  vec2 I_F = vec2(.5 * h_2, .5 * v_2);
+  // vec2 I_F = vec2(.5 * h_2, .5 * v_2);
+  vec2 I_F = .5 * vec2(F_6 - F_4, F_8 - F_2);
 
-  I_F *= vec2(-1, 1);
+  I_F *= vec2(1, 1);
 
   imageStore(grad_out, ipos, vec4(I_F, I_F));
 }
