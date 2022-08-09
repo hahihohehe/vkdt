@@ -414,7 +414,7 @@ create_nodes(
         dt_connector_copy(graph, module, 0, id_warp, 0);
         CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
         dt_connector_copy(graph, module, 1, id_warp, 2);
-        dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
+        // dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
 
         CONN(dt_node_connect(graph, id_warp, 4, id_lk, 2)); // mv from warp
       }
@@ -429,6 +429,35 @@ create_nodes(
       if (i + 1 == lk_r)
       {
         dt_connector_copy(graph, module, 6, id_lk, 3);  // mv output
+
+        assert(graph->num_nodes < graph->max_nodes);
+        const int id_visn = graph->num_nodes++;
+        graph->node[id_visn] = (dt_node_t) {
+            .name   = dt_token("align"),
+            .kernel = dt_token("visn"),
+            .module = module,
+            .wd     = roi[0].wd,
+            .ht     = roi[0].ht,
+            .dp     = 1,
+            .num_connectors = 2,
+            .connector = {{
+                              .name   = dt_token("off"),
+                              .type   = dt_token("read"),
+                              .chan   = dt_token("rg"),
+                              .format = dt_token("f16"),
+                              .roi    = roi[0],
+                              .connected_mi = -1,
+                          },
+                          {
+                              .name   = dt_token("visn"),
+                              .type   = dt_token("write"),
+                              .chan   = dt_token("rgba"),
+                              .format = dt_token("f16"),
+                              .roi    = roi[0],
+                          }},
+        };
+        CONN(dt_node_connect(graph, id_lk, 3, id_visn, 0));
+        dt_connector_copy(graph, module, 5, id_visn, 1); // pass on visn
       }
 
       last_lk = id_lk;
