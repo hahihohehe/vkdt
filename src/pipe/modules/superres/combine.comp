@@ -80,8 +80,11 @@ main()
   vec2 epos = vec2(ipos) / res;   // effective position
   ivec2 spos = ivec2(epos + vec2(.5, .5));
 
+  #ifndef DT_SR_INTERPOLATE_OFFSETS
   if (params.gauss <= 0)
     epos += params.off * texelFetch(off, spos, 0).xy;
+  #endif
+
   // vec2 epos = ipos + o;
   // vec2 epos = ipos;
 
@@ -110,14 +113,19 @@ main()
           float phi = M_PI * params.rot;
           float afac = 1 - params.ani;
           vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
-          ivec2 sourcepos = ivec2(epos + vec2(.5, .5)) + ivec2(i, j);// position of sample
-          vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
+          #ifndef DT_SR_INTERPOLATE_OFFSETS
+          vec2 opos = epos;   // epos with offset
+          #else
+          vec2 opos = epos + params.off * texture(off, (epos + vec2(i, j) + .5) / textureSize(off, 0)).xy;
+          #endif
+          ivec2 sourcepos = ivec2(opos + vec2(.5, .5)) + ivec2(i, j);// position of sample
+          vec2 actualsourcepos = opos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
 
           vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
-          vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
+          vec2 sub = opos - vec2(ivec2(opos + vec2(.5, .5)));
           if (params.sup > 0){
             eval_gauss(cov, sub - vec2(i, j), weight);
           } else {
