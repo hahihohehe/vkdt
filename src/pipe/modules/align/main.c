@@ -299,6 +299,76 @@ create_nodes(
   // but would need refinement if more fidelity is required (as input for
   // splatting super res demosaic for instance)
 
+#ifdef DT_LK_BEFORE_WARP
+  int last_lk;
+  if (lk_r > 0) {
+    for (int i = 0; i < lk_r; i++) {
+      assert(graph->num_nodes < graph->max_nodes);
+      const int id_lk = graph->num_nodes++;
+      graph->node[id_lk] = (dt_node_t) {
+          .name   = dt_token("align"),
+          .kernel = dt_token("lk"),
+          .module = module,
+          .wd     = roi[1].wd,
+          .ht     = roi[1].ht,
+          .dp     = 1,
+          .num_connectors = 5,
+          .connector = {{
+                            .name   = dt_token("F"),
+                            .type   = dt_token("read"),
+                            .chan   = dt_token("y"),
+                            .format = dt_token("f16"),
+                            .roi    = roi[1],
+                            .connected_mi = -1,
+                        },
+                        {
+                            .name   = dt_token("G"),
+                            .type   = dt_token("read"),
+                            .chan   = dt_token("y"),
+                            .format = dt_token("f16"),
+                            .roi    = roi[1],
+                            .connected_mi = -1,
+                        },
+                        {
+                            .name   = dt_token("off"),
+                            .type   = dt_token("read"),
+                            .chan   = dt_token("rg"),
+                            .format = dt_token("f16"),
+                            .roi    = roi[1],
+                            //.flags  = s_conn_smooth,
+                            .connected_mi = -1,
+                        },
+                        {
+                            .name   = dt_token("output"),
+                            .type   = dt_token("write"),
+                            .chan   = dt_token("rg"),
+                            .format = dt_token("f16"),
+                            .roi    = roi[1],
+                        }},
+          .push_constant_size = 2 * sizeof(uint32_t),
+          .push_constant = {
+              module->img_param.filters,
+              block,
+          },
+      };
+
+      if (i == 0)
+      {
+        CONN(dt_node_connect(graph, id_offset, 2, id_lk, 2)); // mv from merge kernel
+      }
+      else {
+        CONN(dt_node_connect(graph, last_lk, 3, id_lk, 2)); // pass on mv
+      }
+
+      // input images
+      CONN(dt_node_connect(graph, id_down[0][0], 1, id_lk, 1));
+      CONN(dt_node_connect(graph, id_down[1][0], 1, id_lk, 0));
+
+      last_lk = id_lk;
+    }
+  }
+#endif
+
   assert(graph->num_nodes < graph->max_nodes);
   const int id_warp = graph->num_nodes++;
   graph->node[id_warp] = (dt_node_t) {
@@ -350,6 +420,16 @@ create_nodes(
     },
   };
 
+#ifdef DT_LK_BEFORE_WARP
+  if (lk_r > 0)
+    CONN(dt_node_connect(graph, last_lk, 3, id_warp, 1));
+  else
+    CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
+  dt_connector_copy(graph, module, 0, id_warp, 0);
+  dt_connector_copy(graph, module, 1, id_warp, 2);
+  dt_connector_copy(graph, module, 5, id_warp, 3); // pass on visn
+  dt_connector_copy(graph, module, 6, id_warp, 4); // pass on mv
+#else
   if (lk_r <= 0) {
     dt_connector_copy(graph, module, 0, id_warp, 0);
     CONN(dt_node_connect(graph, id_offset, 2, id_warp, 1));
@@ -463,6 +543,7 @@ create_nodes(
       last_lk = id_lk;
     }
   }
+#endif  // DT_LK_BEFORE_WARP
 
 #if 0
   dt_connector_copy(graph, module, 4, id_off[1], 3);  // lo res mask
@@ -518,7 +599,8 @@ create_nodes(
   dt_connector_copy(graph, module, 4, id_mask, 3);
 #endif
 #undef NUM_LEVELS
-#else
+
+#else // DT_NO_ALIGN
     assert(graph->num_nodes < graph->max_nodes);
     const int id_debug = graph->num_nodes++;
     graph->node[id_debug] = (dt_node_t) {
