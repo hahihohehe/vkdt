@@ -13,3 +13,4 @@ k_shri:float:1:2
 d_th:float:1:0.05
 d_tr:float:1:0.01
 gauss:int:1:0
+pointc:int:1:0

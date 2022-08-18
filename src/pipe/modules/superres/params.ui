@@ -13,3 +13,4 @@ k_shri:slider:0:1
 d_th:slider:-0.5:0.5
 d_tr:slider:0:0.04
 gauss:slider:0:1
+pointc:slider:0:1

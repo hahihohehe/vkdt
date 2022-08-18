@@ -15,6 +15,16 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float rot;
   float ani;
   float mask;
+  float off;
+  int image;
+  float k_det;
+  float k_den;
+  float k_stret;
+  float k_shri;
+  float d_th;
+  float d_tr;
+  int gauss;
+  int pointc;
 } params;
 
 layout(push_constant, std140) uniform push_t
@@ -64,7 +74,10 @@ main()
 
   // Do not boost contribution, only lower them if sum over
   // contributing frames is greater than 1
-  weight = clamp(weight, 1, 10000);
+  if (params.pointc > 0)
+  {
+    weight = clamp(weight, 1, 10000);
+  }
 
   col /= weight;
   col.a = 1.0;
