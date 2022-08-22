@@ -104,7 +104,7 @@ main()
 
   if (push.i == params.image || params.image == -1)
   {
-    if (mask > params.cert)
+    if (mask >= params.cert)
     {
       for (int i = -SSIZE; i <= SSIZE; i++)
       {
