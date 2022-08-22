@@ -6,11 +6,6 @@
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
-layout(push_constant, std140) uniform push_t
-{
-  uint block;
-} push;
-
 layout(std140, set = 0, binding = 1) uniform params_t
 {
   float cert;
@@ -109,10 +104,11 @@ main()
 
   float d2 = coldiff * coldiff;
 
-  variance = max(params.sigmd, variance);
-  coldiff = coldiff * d2 / (d2 + params.dmd * params.dmd);
+  // variance = max(params.sigmd, variance);
+  // coldiff = coldiff * d2 / (d2 + params.dmd * params.dmd);
 
-  float R = params.s * exp(-coldiff * coldiff / variance) - params.t;
+  //float R = clamp(params.s * exp(-d2 / variance) - params.t, 0, 1);
+  float R = clamp(params.s * diff(m5, r5), 0, 1);
 
-  imageStore(mask_out, ipos, vec4(variance));
+  imageStore(mask_out, ipos, vec4(R, R, R, R));
 }

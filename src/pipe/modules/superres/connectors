@@ -30,3 +30,4 @@ input10:read:*:*
 mv10:read:rg:f16
 mask10:read:y:f16
 output:write:rgba:f16
+debug:write:rgba:f16

@@ -1,8 +1,10 @@
 #include "modules/api.h"
+#include "config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 #define OUTPUT 31
 
@@ -43,6 +45,9 @@ void modify_roi_out(
     res += 1.0f;
     ro->full_ht = res * (float) ri->full_ht;
     ro->full_wd = res * (float) ri->full_wd;
+
+    module->connector[OUTPUT+1].roi.full_wd = ri->full_wd;
+    module->connector[OUTPUT+1].roi.full_ht = ri->full_ht;
 }
 
 dt_graph_run_t
@@ -140,6 +145,61 @@ create_nodes(
     dt_connector_copy(graph, module, 0, id_cf, 0);
     CONN(dt_node_connect(graph, id_grad, 1, id_cf, 1));     // grad
 
+#ifdef DT_SR_USE_ROBUSTNESS
+    dt_roi_t roi_guide = *ri;
+    if (module->img_param.filters > 0)
+    {   // assume bayer input -> half res on blocks
+        roi_guide.full_wd = roi_guide.full_wd + 1 / 2;
+        roi_guide.full_ht = roi_guide.full_ht + 1 / 2;
+        roi_guide.wd = roi_guide.wd + 1 / 2;
+        roi_guide.ht = roi_guide.ht + 1 / 2;
+        roi_guide.scale = 1;
+    }
+
+    assert(graph->num_nodes < graph->max_nodes);
+    const int id_guide_ref = graph->num_nodes++;
+    dt_node_t *node_guide_ref = graph->node + id_guide_ref;
+    *node_guide_ref = (dt_node_t) {
+            .name   = dt_token("superres"),
+            .kernel = dt_token("guide"),
+            .module = module,
+            .wd     = roi_guide.wd,
+            .ht     = roi_guide.ht,
+            .dp     = 1,
+            .num_connectors = 3,
+            .connector = {{
+                                  .name   = dt_token("img"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("rggb"),
+                                  .format = dt_token("*"),
+                                  .roi    = *ri,
+                                  .connected_mi = -1,
+                          },
+                          {
+                                  .name   = dt_token("off"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("rggb"),
+                                  .format = dt_token("f16"),
+                                  .roi    = *ri,
+                                  .connected_mi = -1,
+                          },
+                          {
+                                  .name   = dt_token("guide"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = roi_guide,
+                          }},
+            .push_constant_size = 2 * sizeof(uint32_t),
+            .push_constant = {
+                    module->img_param.filters == 0 ? 1 : 2,
+                    0,  // reference image
+            },
+    };
+    dt_connector_copy(graph, module, 0, id_guide_ref, 0);
+    dt_connector_copy(graph, module, 0, id_guide_ref, 1);   // dummy input for offsets
+#endif
+
     int num_connected = 0;
     int id_combine_prev;
     for (int i = 0; i < 10; i++)     // go through each input set
@@ -148,6 +208,90 @@ create_nodes(
         if(module->connector[1+3*i].connected_mi >= 0 &&
            module->connector[1+3*i].connected_mc >= 0)
         {
+#ifdef DT_SR_USE_ROBUSTNESS
+            assert(graph->num_nodes < graph->max_nodes);
+            int id_guide = graph->num_nodes++;
+            dt_node_t *node_guide = graph->node + id_guide;
+            *node_guide = (dt_node_t) {
+                    .name   = dt_token("superres"),
+                    .kernel = dt_token("guide"),
+                    .module = module,
+                    .wd     = roi_guide.wd,
+                    .ht     = roi_guide.ht,
+                    .dp     = 1,
+                    .num_connectors = 3,
+                    .connector = {{
+                                          .name   = dt_token("img"),
+                                          .type   = dt_token("read"),
+                                          .chan   = dt_token("rggb"),
+                                          .format = dt_token("*"),
+                                          .roi    = *ri,
+                                          .connected_mi = -1,
+                                  },
+                                  {
+                                          .name   = dt_token("off"),
+                                          .type   = dt_token("read"),
+                                          .chan   = dt_token("rg"),
+                                          .format = dt_token("f16"),
+                                          .roi    = *ri,
+                                          .connected_mi = -1,
+                                  },
+                                  {
+                                          .name   = dt_token("guide"),
+                                          .type   = dt_token("write"),
+                                          .chan   = dt_token("rgba"),
+                                          .format = dt_token("f16"),
+                                          .roi    = roi_guide,
+                                  }},
+                    .push_constant_size = 2 * sizeof(uint32_t),
+                    .push_constant = {
+                            module->img_param.filters == 0 ? 1 : 2,
+                            i + 1,
+                    },
+            };
+            dt_connector_copy(graph, module, 1+3*i, id_guide, 0);
+            dt_connector_copy(graph, module, 1+3*i+1, id_guide, 1);
+
+
+            assert(graph->num_nodes < graph->max_nodes);
+            int id_mask = graph->num_nodes++;
+            dt_node_t *node_mask = graph->node + id_mask;
+            *node_mask = (dt_node_t) {
+                    .name   = dt_token("superres"),
+                    .kernel = dt_token("mask"),
+                    .module = module,
+                    .wd     = ri->wd,
+                    .ht     = ri->ht,
+                    .dp     = 1,
+                    .num_connectors = 3,
+                    .connector = {{
+                                          .name   = dt_token("img"),
+                                          .type   = dt_token("read"),
+                                          .chan   = dt_token("rgba"),
+                                          .format = dt_token("f16"),
+                                          .roi    = roi_guide,
+                                          .connected_mi = -1,
+                                  },
+                                  {
+                                          .name   = dt_token("ref"),
+                                          .type   = dt_token("read"),
+                                          .chan   = dt_token("rgba"),
+                                          .format = dt_token("f16"),
+                                          .roi    = roi_guide,
+                                          .connected_mi = -1,
+                                  },
+                                  {
+                                          .name   = dt_token("mask"),
+                                          .type   = dt_token("write"),
+                                          .chan   = dt_token("y"),
+                                          .format = dt_token("f16"),
+                                          .roi    = *ri,
+                                  }},
+            };
+            CONN(dt_node_connect(graph, id_guide, 2, id_mask, 0));     // img
+            CONN(dt_node_connect(graph, id_guide_ref, 2, id_mask, 1));     // ref
+#endif
+
             assert(graph->num_nodes < graph->max_nodes);
             id_grad = graph->num_nodes++;
             dt_node_t *node_grad = graph->node + id_grad;
@@ -270,7 +414,21 @@ create_nodes(
             // connect align inputs
             dt_connector_copy(graph, module, 1+3*i, id_combine, 0);     // img
             dt_connector_copy(graph, module, 1+3*i+1, id_combine, 1);   // mv
+
+#ifdef DT_SR_USE_ROBUSTNESS
+            CONN(dt_node_connect(graph, id_mask, 2, id_combine, 2));     // mask
+
+            if (i + 1 == dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0])
+            {
+                dt_connector_copy(graph, module, OUTPUT + 1, id_guide, 2);
+            }
+            else if (i == 0 && dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0] == 0)
+            {
+                dt_connector_copy(graph, module, OUTPUT + 1, id_guide_ref, 2);
+            }
+#else
             dt_connector_copy(graph, module, 1+3*i+2, id_combine, 2);   // mask
+#endif
 
             num_connected++;
             id_combine_prev = id_combine;

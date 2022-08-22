@@ -13,6 +13,7 @@ layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_siz
 layout(push_constant, std140) uniform push_t
 {
   uint block;
+  uint i;
 } push;
 
 layout( // input buffer rggb / rgba
@@ -38,22 +39,27 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(guide_out)))) return;
 
-  vec2 mv = texture(off_in, (ipos + .5) / imageSize(guide_out), 0).xy;
-  ivec2 off = ivec2(mv + .5);
+  ivec2 off = ivec2(0, 0);
+  if (push.i != 0)
+  {
+    vec2 mv = texelFetch(off_in, 2 * ipos, 0).xy;
+    off = ivec2(mv + .5);
+  }
 
   vec3 col = vec3(0, 0, 0);
 
-  if (push.block == 0)
+  if (push.block < 2)
   {
     col = texelFetch(img_in, ipos + off, 0).rgb;
   }
   else  // assume bayer
   {
-    float m1 = texelFetch(img_in, 2 * (ipos + off) + ivec2(0, 0), 0).r;
-    float m2 = texelFetch(img_in, 2 * (ipos + off) + ivec2(0, 1), 0).r;
-    float m3 = texelFetch(img_in, 2 * (ipos + off) + ivec2(1, 0), 0).r;
-    float m4 = texelFetch(img_in, 2 * (ipos + off) + ivec2(1, 1), 0).r;
-    col = vec3(m1 + m3, m2, m4);
+    ivec2 blockpos = 2 * (ivec2(2 * ipos + off) / 2);
+    float m1 = texelFetch(img_in, blockpos + ivec2(0, 0), 0).r;
+    float m2 = texelFetch(img_in, blockpos + ivec2(0, 1), 0).r;
+    float m3 = texelFetch(img_in, blockpos + ivec2(1, 0), 0).r;
+    float m4 = texelFetch(img_in, blockpos + ivec2(1, 1), 0).r;
+    col = vec3(.5 * m1 + .5 * m3, m2, m4);
   }
 
   imageStore(guide_out, ipos, vec4(col, 1));
