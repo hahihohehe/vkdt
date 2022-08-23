@@ -292,6 +292,7 @@ create_nodes(
             CONN(dt_node_connect(graph, id_guide_ref, 2, id_mask, 1));     // ref
 #endif
 
+#ifndef DT_SR_REF_GRAD
             assert(graph->num_nodes < graph->max_nodes);
             id_grad = graph->num_nodes++;
             dt_node_t *node_grad = graph->node + id_grad;
@@ -320,6 +321,7 @@ create_nodes(
                             }},
             };
             dt_connector_copy(graph, module, 1+3*i, id_grad, 0);
+#endif
 
             assert(graph->num_nodes < graph->max_nodes);
             const int id_combine = graph->num_nodes++;

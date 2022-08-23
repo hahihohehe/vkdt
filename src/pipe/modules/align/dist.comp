@@ -77,6 +77,10 @@ main()
   // float dist = (i0-i1)*(i0-i1) / max(1e-3, max(i0*i0, i1*i1));
   // float dist = (2.0-exp(-(offx*offx+offy*offy)*.001)) * (i0 - i1)*(i0 - i1); // L2 center weighted
 
+  // some test
+  //float d = abs(i0 - i1)/max(1e-8,max(abs(i0),abs(i1)));
+  //float dist = d * d;
+
   // dist = max(dist - 0.2, 0.0); // subtract noise floor
   // if(dist == 0.0 && offidx != 12) dist = 10.0; // if only black pixels are matched, prefer the no-offset one!
   // if(offidx != 12) dist += .1; // offset everything a bit so the center will be preferred for equality

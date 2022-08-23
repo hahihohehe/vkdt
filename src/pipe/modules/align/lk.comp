@@ -136,5 +136,4 @@ main()
   vec2 h_k1 = h_k + 1 * change;
 
   imageStore(off_out, ipos, vec4(h_k1, h_k1));
-  //imageStore(off_out, ipos, vec4(h_k + vec2(3, 3), h_k + vec2(3, 3)));
 }

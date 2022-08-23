@@ -224,7 +224,7 @@ check_params(
   return s_graph_run_record_cmd_buf;
 }
 
-#define SIZE_DIV 4
+#define SIZE_DIV 1
 
 // this callback is responsible to set the full_{wd,ht} dimensions on the
 // regions of interest on all "write"|"source" channels
