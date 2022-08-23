@@ -31,6 +31,14 @@ out float weight)
   evec0 = vec2(1, 0);
   evec1 = vec2(0, -1);*/
 
+  if (eval.y > eval.x)
+  {
+    eval.xy = eval.yx;
+    vec2 tmp = evec0;
+    evec0 = evec1;
+    evec1 = evec0;
+  }
+
   float l1 = eval.x;
   float l2 = eval.y;
 
@@ -53,8 +61,10 @@ out float weight)
   float k2_ = k_detail / (k_shrink * A);
   float k1 = ((1 - D) * k1_ + D * k_detail * k_denoise);
   k1 *= k1;
+  k1 = clamp(k1, params.t, 100);
   float k2 = ((1 - D) * k2_ + D * k_detail * k_denoise);
   k2 *= k2;
+  k2 = clamp(k2, params.t, 100);
 
   vec2 of = vec2(dot(off, evec0), dot(off, evec1));
   weight = clamp(exp(-0.5*dot(of/vec2(k2, k1), of)), 1e-4, 1);

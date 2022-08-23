@@ -31,6 +31,11 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float d_th;
   float d_tr;
   int gauss;
+  int pointc;
+  float dmd;
+  float sigmd;
+  float s;
+  float t;
 } params;
 
 layout( // input rggb original
