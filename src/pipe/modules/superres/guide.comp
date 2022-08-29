@@ -40,7 +40,7 @@ main()
   if(any(greaterThanEqual(ipos, imageSize(guide_out)))) return;
 
   ivec2 off = ivec2(0, 0);
-  if (push.i != 0)
+  if (false && push.i != 0)
   {
     vec2 mv = texelFetch(off_in, 2 * ipos, 0).xy;
     off = ivec2(mv + .5);
@@ -54,12 +54,15 @@ main()
   }
   else  // assume bayer
   {
-    ivec2 blockpos = 2 * (ivec2(2 * ipos + off) / 2);
+    /*ivec2 blockpos = 2 * (ivec2(2 * ipos + off) / 2);
     float m1 = texelFetch(img_in, blockpos + ivec2(0, 0), 0).r;
     float m2 = texelFetch(img_in, blockpos + ivec2(0, 1), 0).r;
     float m3 = texelFetch(img_in, blockpos + ivec2(1, 0), 0).r;
     float m4 = texelFetch(img_in, blockpos + ivec2(1, 1), 0).r;
-    col = vec3(.5 * m1 + .5 * m3, m2, m4);
+    col = vec3(.5 * m1 + .5 * m3, m2, m4);*/
+
+    vec4 c = textureGather(img_in, 2*(ipos+.5)/vec2(textureSize(img_in, 0)), 0);
+    col = vec3(c.w, (c.x+c.z)/2.0, c.y);
   }
 
   imageStore(guide_out, ipos, vec4(col, 1));

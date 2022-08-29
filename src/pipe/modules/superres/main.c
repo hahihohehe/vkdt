@@ -46,8 +46,8 @@ void modify_roi_out(
     ro->full_ht = res * (float) ri->full_ht;
     ro->full_wd = res * (float) ri->full_wd;
 
-    module->connector[OUTPUT+1].roi.full_wd = ri->full_wd;
-    module->connector[OUTPUT+1].roi.full_ht = ri->full_ht;
+    module->connector[OUTPUT+1].roi.full_wd = (ri->full_wd + 1) / 2;
+    module->connector[OUTPUT+1].roi.full_ht = (ri->full_ht + 1) / 2;
 }
 
 dt_graph_run_t
@@ -149,10 +149,10 @@ create_nodes(
     dt_roi_t roi_guide = *ri;
     if (module->img_param.filters > 0)
     {   // assume bayer input -> half res on blocks
-        roi_guide.full_wd = roi_guide.full_wd + 1 / 2;
-        roi_guide.full_ht = roi_guide.full_ht + 1 / 2;
-        roi_guide.wd = roi_guide.wd + 1 / 2;
-        roi_guide.ht = roi_guide.ht + 1 / 2;
+        roi_guide.full_wd = (roi_guide.full_wd + 1) / 2;
+        roi_guide.full_ht = (roi_guide.full_ht + 1) / 2;
+        roi_guide.wd = (roi_guide.wd + 1) / 2;
+        roi_guide.ht = (roi_guide.ht + 1) / 2;
         roi_guide.scale = 1;
     }
 
@@ -170,7 +170,7 @@ create_nodes(
             .connector = {{
                                   .name   = dt_token("img"),
                                   .type   = dt_token("read"),
-                                  .chan   = dt_token("rggb"),
+                                  .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
                                   .format = dt_token("*"),
                                   .roi    = *ri,
                                   .connected_mi = -1,
@@ -223,7 +223,7 @@ create_nodes(
                     .connector = {{
                                           .name   = dt_token("img"),
                                           .type   = dt_token("read"),
-                                          .chan   = dt_token("rggb"),
+                                          .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
                                           .format = dt_token("*"),
                                           .roi    = *ri,
                                           .connected_mi = -1,
@@ -424,10 +424,10 @@ create_nodes(
             {
                 dt_connector_copy(graph, module, OUTPUT + 1, id_guide, 2);
             }
-            else if (i == 0 && dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0] == 0)
+            /*else if (i == 0 && dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0] == 0)
             {
                 dt_connector_copy(graph, module, OUTPUT + 1, id_guide_ref, 2);
-            }
+            }*/
 #else
             dt_connector_copy(graph, module, 1+3*i+2, id_combine, 2);   // mask
 #endif
