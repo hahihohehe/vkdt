@@ -61,20 +61,42 @@ main()
 
   vec4 res1 = vec4(0, 0, 6500000, 1);
 
-  float dist[25];
+  #ifdef DT_ALIGN_SHIFT3
+  const int len = 49;
+  #else
+  #ifdef DT_ALIGN_SHIFT4
+  const int len = 81;
+  #else
+  const int len = 25;
+  #endif
+  #endif
+
+  float dist[len];
   int bi = 0;
-  for(int i=0;i<25;i++)
+  for(int i=0;i<len;i++)
     // dist[i] = sample_soft(img_dist[i], (ipos+.5)/vec2(imageSize(img_out))).r;
     // dist[i] = textureLod(img_dist[i], (ipos+.5)/vec2(imageSize(img_out)), 0).r;
     dist[i] = texelFetch(img_dist[i], ipos, 0).r;
-  for(int i=0;i<25;i++)
+  for(int i=0;i<len;i++)
     if(dist[i] < dist[bi]) bi = i;
   // prefer center for completely constant input
-  if(dist[12] == dist[bi]) bi = 12;
+  if(dist[len/2] == dist[bi]) bi = len/2;
 
+  #ifdef DT_ALIGN_SHIFT3
+  int offy = bi / 7;
+  int offx = bi - offy * 7;
+  offx -= 3; offy -= 3;
+  #else
+  #ifdef DT_ALIGN_SHIFT4
+  int offy = bi / 9;
+  int offx = bi - offy * 9;
+  offx -= 4; offy -= 4;
+  #else
   int offy = bi / 5;
   int offx = bi - offy * 5;
   offx -= 2; offy -= 2;
+  #endif
+  #endif
 
   res1 = vec4(coff + vec2(offx, offy), dist[bi], 1);
 

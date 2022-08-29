@@ -4,9 +4,9 @@
 // TODO: redo timing. but it seems down4 is a lot more precise (less pyramid approx?)
 #define DOWN 4
 #if DOWN==4
-#define NUM_LEVELS 4
+#define NUM_LEVELS 3
 #else
-#define NUM_LEVELS 6
+#define NUM_LEVELS 3
 #endif
 
 dt_graph_run_t
@@ -185,7 +185,15 @@ create_nodes(
       .module = module,
       .wd     = roi[i+1].wd,
       .ht     = roi[i+1].ht,
+#ifdef DT_ALIGN_SHIFT3
+      .dp     = 49,
+#else
+#ifdef DT_ALIGN_SHIFT4
+      .dp     = 81,
+#else
       .dp     = 25,
+#endif
+#endif
       .num_connectors = 4,
       .connector = {{
         .name   = dt_token("input"),
@@ -215,7 +223,15 @@ create_nodes(
         .chan   = dt_token("y"),
         .format = fmt_dst,
         .roi    = roi[i+1],
+#ifdef DT_ALIGN_SHIFT3
+        .array_length = 49,
+#else
+#ifdef DT_ALIGN_SHIFT4
+        .array_length = 81,
+#else
         .array_length = 25,
+#endif
+#endif
       }},
       .push_constant_size = 2*sizeof(uint32_t),
       .push_constant = { id_offset >= 0 ? DOWN: 0, i },
@@ -254,7 +270,15 @@ create_nodes(
         .roi    = roi[i+1],
         .flags  = s_conn_smooth,
         .connected_mi = -1,
+#ifdef DT_ALIGN_SHIFT3
+        .array_length = 49,
+#else
+#ifdef DT_ALIGN_SHIFT4
+        .array_length = 81,
+#else
         .array_length = 25,
+#endif
+#endif
       },{
         .name   = dt_token("coff"),
         .type   = dt_token("read"),

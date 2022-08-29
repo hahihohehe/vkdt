@@ -3,6 +3,7 @@
 #extension GL_EXT_nonuniform_qualifier    : enable
 
 #include "shared.glsl"
+#include "config.h"
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
@@ -43,12 +44,29 @@ main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID.xy);
   int offidx = int  (gl_GlobalInvocationID.z);
-  if(any(greaterThanEqual(ivec3(ipos, offidx), ivec3(imageSize(img_out[offidx]), 25)))) return;
 
+  #ifdef DT_ALIGN_SHIFT3
+  if(any(greaterThanEqual(ivec3(ipos, offidx), ivec3(imageSize(img_out[offidx]), 49)))) return;
+  int offy = offidx / 7;
+  int offx = offidx - 7*offy;
+  offx -= 3;
+  offy -= 3;
+  #else
+  #ifdef DT_ALIGN_SHIFT4
+  if(any(greaterThanEqual(ivec3(ipos, offidx), ivec3(imageSize(img_out[offidx]), 81)))) return;
+  int offy = offidx / 9;
+  int offx = offidx - 9*offy;
+  offx -= 4;
+  offy -= 4;
+  #else
+  if(any(greaterThanEqual(ivec3(ipos, offidx), ivec3(imageSize(img_out[offidx]), 25)))) return;
   int offy = offidx / 5;
   int offx = offidx - 5*offy;
   offx -= 2;
   offy -= 2;
+  #endif
+  #endif
+
 
   // interestingly using texture() to go outside [0,1] causes black borders because we'd need
   // to do the texture repeat the same way during warp i suppose.
