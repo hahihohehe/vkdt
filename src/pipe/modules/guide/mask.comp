@@ -14,8 +14,12 @@ layout( // input buffer rgba
 set = 1, binding = 1
 ) uniform sampler2D ref_in;
 
-layout( // output gradients
+layout( // local motion variation y
 set = 1, binding = 2
+) uniform sampler2D mot_in;
+
+layout( // output gradients
+set = 1, binding = 3
 ) uniform writeonly image2D mask_out;
 
 float diff(vec3 a, vec3 b)
@@ -79,13 +83,22 @@ main()
 
   float d2 = coldiff * coldiff;
 
-  float sigmd = 0.001;
+  float sigmd = 0.00001;
   variance = max(sigmd, variance);
   float dmd = 0;
   coldiff = coldiff * d2 / (d2 + dmd * dmd);
   d2 = coldiff * coldiff;
   float s = 2;
-  float t = .12;
+  float t = .20;
+
+  // ======================================================
+  // Local motion estimation
+  float mot = texelFetch(mot_in, ipos, 0).r;
+  if (mot > .2)
+  {
+    s = 12;
+  }
+  // ======================================================
 
   float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
   //float R = clamp(1 * diff(m5, r5), 0, 1);
