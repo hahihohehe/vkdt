@@ -79,11 +79,16 @@ main()
 
   float d2 = coldiff * coldiff;
 
-  // variance = max(params.sigmd, variance);
-  // coldiff = coldiff * d2 / (d2 + params.dmd * params.dmd);
+  float sigmd = 0.001;
+  variance = max(sigmd, variance);
+  float dmd = 0;
+  coldiff = coldiff * d2 / (d2 + dmd * dmd);
+  d2 = coldiff * coldiff;
+  float s = 2;
+  float t = .12;
 
-  //float R = clamp(params.s * exp(-d2 / variance) - params.t, 0, 1);
-  float R = clamp(1 * diff(m5, r5), 0, 1);
+  float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
+  //float R = clamp(1 * diff(m5, r5), 0, 1);
 
   imageStore(mask_out, ipos, vec4(R, R, R, 1));
 }
