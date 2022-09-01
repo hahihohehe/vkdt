@@ -90,5 +90,5 @@ main()
   float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
   //float R = clamp(1 * diff(m5, r5), 0, 1);
 
-  imageStore(mask_out, ipos, vec4(R, R, R, 1));
+  imageStore(mask_out, ipos, vec4(R, R, R, R));
 }

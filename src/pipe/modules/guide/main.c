@@ -71,6 +71,7 @@ create_nodes(
                                   .chan   = dt_token("rg"),
                                   .format = dt_token("f16"),
                                   .roi    = module->connector[0].roi,
+                                  .connected_mi = -1,
                           },{
                                   .name   = dt_token("output"),
                                   .type   = dt_token("write"),
@@ -107,6 +108,7 @@ create_nodes(
                 .chan   = dt_token("rg"),
                 .format = dt_token("f16"),
                 .roi    = module->connector[0].roi,
+                .connected_mi = -1,
             },{
                 .name   = dt_token("output"),
                 .type   = dt_token("write"),
@@ -143,10 +145,11 @@ create_nodes(
             .chan   = dt_token("rgba"),
             .format = dt_token("f16"),
             .roi    = module->connector[1].roi,
+            .connected_mi = -1,
         },{
             .name   = dt_token("output"),
             .type   = dt_token("write"),
-            .chan   = dt_token("rgba"),
+            .chan   = dt_token("y"),
             .format = dt_token("f16"),
             .roi    = module->connector[1].roi,
         }},
