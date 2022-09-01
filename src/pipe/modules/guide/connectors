@@ -1,0 +1,3 @@
+input:read:*:*
+output:write:rgba:f16
+mv:read:rg:f16
