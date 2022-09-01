@@ -48,7 +48,7 @@ create_nodes(
 {
     const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
 
-    assert(graph->num_nodes < graph->max_nodes);
+    /*assert(graph->num_nodes < graph->max_nodes);
     int id_guide = graph->num_nodes++;
     graph->node[id_guide] = (dt_node_t) {
             .name   = dt_token("guide"),
@@ -83,5 +83,32 @@ create_nodes(
     };
     dt_connector_copy(graph, module, 0, id_guide, 0);
     dt_connector_copy(graph, module, 1, id_guide, 2);
-    dt_connector_copy(graph, module, 2, id_guide, 1);
+    dt_connector_copy(graph, module, 2, id_guide, 1);*/
+
+    assert(graph->num_nodes < graph->max_nodes);
+    int id_visn = graph->num_nodes++;
+    graph->node[id_visn] = (dt_node_t) {
+            .name   = dt_token("guide"),
+            .kernel = dt_token("visn"),
+            .module = module,
+            .wd     = module->connector[1].roi.wd,
+            .ht     = module->connector[1].roi.ht,
+            .dp     = 1,
+            .num_connectors = 3,
+            .connector = {{
+                                  .name   = dt_token("mv"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[0].roi,
+                          },{
+                                  .name   = dt_token("output"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[1].roi,
+                          }},
+    };
+    dt_connector_copy(graph, module, 2, id_visn, 0);
+    dt_connector_copy(graph, module, 1, id_visn, 1);
 }
