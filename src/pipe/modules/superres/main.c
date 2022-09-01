@@ -422,7 +422,7 @@ create_nodes(
 
             if (i + 1 == dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0])
             {
-                dt_connector_copy(graph, module, OUTPUT + 1, id_guide, 2);
+                // dt_connector_copy(graph, module, OUTPUT + 1, id_guide, 2);
             }
             /*else if (i == 0 && dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0] == 0)
             {

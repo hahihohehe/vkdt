@@ -66,8 +66,8 @@ out float weight)
   k2 *= k2;
   k2 = clamp(k2, params.t, 100);
 
-  vec2 of = vec2(dot(off, evec0), dot(off, evec1));
-  weight = clamp(exp(-0.5*dot(of/vec2(k2, k1), of)), 1e-4, 1);
+  vec2 of = vec2(dot(off, evec1), dot(off, evec0));
+  weight = clamp(exp(-0.5*dot(of/vec2(k1, k2), of)), 1e-1, 1);
 }
 
 vec4
