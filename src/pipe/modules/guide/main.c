@@ -21,6 +21,10 @@ void modify_roi_in(
     module->connector[0].roi.wd = module->connector[0].roi.full_wd;
     module->connector[0].roi.ht = module->connector[0].roi.full_ht;
     module->connector[0].roi.scale = 1.0f;
+
+    module->connector[3].roi.wd = module->connector[3].roi.full_wd;
+    module->connector[3].roi.ht = module->connector[3].roi.full_ht;
+    module->connector[3].roi.scale = 1.0f;
 }
 
 void modify_roi_out(
@@ -39,6 +43,7 @@ void modify_roi_out(
 
     module->connector[1].roi = roi_out;
     module->connector[2].roi = module->connector[0].roi;
+    module->connector[3].roi = module->connector[0].roi;
 }
 
 void
@@ -48,7 +53,7 @@ create_nodes(
 {
     const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
 
-    assert(graph->num_nodes < graph->max_nodes);
+    /*assert(graph->num_nodes < graph->max_nodes);
     int id_guide = graph->num_nodes++;
     graph->node[id_guide] = (dt_node_t) {
             .name   = dt_token("guide"),
@@ -120,7 +125,7 @@ create_nodes(
         .push_constant = { block, 0 },
     };
     dt_connector_copy(graph, module, 3, id_guide_ref, 0);
-    dt_connector_copy(graph, module, 2, id_guide_ref, 1);
+    dt_connector_copy(graph, module, 2, id_guide_ref, 1);*/
 
     assert(graph->num_nodes < graph->max_nodes);
     int id_mot = graph->num_nodes++;
@@ -142,14 +147,16 @@ create_nodes(
             },{
                 .name   = dt_token("output"),
                 .type   = dt_token("write"),
-                .chan   = dt_token("y"),
+                .chan   = dt_token("rgba"),
                 .format = dt_token("f16"),
                 .roi    = module->connector[1].roi,
             }},
     };
     dt_connector_copy(graph, module, 2, id_mot, 0);
 
-    assert(graph->num_nodes < graph->max_nodes);
+    dt_connector_copy(graph, module, 1, id_mot, 1);
+
+    /*assert(graph->num_nodes < graph->max_nodes);
     int id_mask = graph->num_nodes++;
     graph->node[id_mask] = (dt_node_t) {
         .name   = dt_token("guide"),
@@ -191,6 +198,6 @@ create_nodes(
     CONN(dt_node_connect(graph, id_guide, 2, id_mask, 0));
     CONN(dt_node_connect(graph, id_guide_ref, 2, id_mask, 1));
     CONN(dt_node_connect(graph, id_mot, 1, id_mask, 2));
-    dt_connector_copy(graph, module, 1, id_mask, 3);
+    dt_connector_copy(graph, module, 1, id_mask, 3);*/
 
 }

@@ -37,8 +37,8 @@ main()
     }
   }
 
-  float mov = length(M - m);
+  float mov = clamp(.3 * length(M - m), 0, 1);
 
 
-  imageStore(mot_out, ipos, vec4(mov, mov, mov, mov));
+  imageStore(mot_out, ipos, vec4(mov, mov, mov, 1));
 }
