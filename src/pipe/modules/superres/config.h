@@ -1,3 +1,2 @@
 // #define DT_SR_INTERPOLATE_OFFSETS
-// #define DT_SR_USE_ROBUSTNESS
 // #define DT_SR_REF_GRAD

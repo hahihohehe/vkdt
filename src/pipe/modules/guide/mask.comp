@@ -6,30 +6,6 @@
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
-layout(std140, set = 0, binding = 1) uniform params_t
-{
-  float cert;
-  float inc;
-  float sup;
-  float rot;
-  float ani;
-  float mask;
-  float off;
-  int image;
-  float k_det;
-  float k_den;
-  float k_stret;
-  float k_shri;
-  float d_th;
-  float d_tr;
-  int gauss;
-  int pointc;
-  float dmd;
-  float sigmd;
-  float s;
-  float t;
-} params;
-
 layout( // input buffer rgba
 set = 1, binding = 0
 ) uniform sampler2D img_in;
@@ -38,8 +14,12 @@ layout( // input buffer rgba
 set = 1, binding = 1
 ) uniform sampler2D ref_in;
 
-layout( // output gradients
+layout( // local motion variation y
 set = 1, binding = 2
+) uniform sampler2D mot_in;
+
+layout( // output gradients
+set = 1, binding = 3
 ) uniform writeonly image2D mask_out;
 
 float diff(vec3 a, vec3 b)
@@ -52,7 +32,6 @@ main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(mask_out)))) return;
-
 
   vec3 m1 = texelFetch(img_in, ipos + ivec2(-1, -1), 0).rgb;
   vec3 m2 = texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb;
@@ -80,15 +59,15 @@ main()
   variance /= 9;
 
   // color difference
-  vec3 r1 = texelFetch(img_in, ipos + ivec2(-1, -1), 0).rgb;
-  vec3 r2 = texelFetch(img_in, ipos + ivec2(0, -1), 0).rgb;
-  vec3 r3 = texelFetch(img_in, ipos + ivec2(1, -1), 0).rgb;
-  vec3 r4 = texelFetch(img_in, ipos + ivec2(-1, 0), 0).rgb;
-  vec3 r5 = texelFetch(img_in, ipos + ivec2(0, 0), 0).rgb;
-  vec3 r6 = texelFetch(img_in, ipos + ivec2(1, 0), 0).rgb;
-  vec3 r7 = texelFetch(img_in, ipos + ivec2(-1, 1), 0).rgb;
-  vec3 r8 = texelFetch(img_in, ipos + ivec2(0, 1), 0).rgb;
-  vec3 r9 = texelFetch(img_in, ipos + ivec2(1, 1), 0).rgb;
+  vec3 r1 = texelFetch(ref_in, ipos + ivec2(-1, -1), 0).rgb;
+  vec3 r2 = texelFetch(ref_in, ipos + ivec2(0, -1), 0).rgb;
+  vec3 r3 = texelFetch(ref_in, ipos + ivec2(1, -1), 0).rgb;
+  vec3 r4 = texelFetch(ref_in, ipos + ivec2(-1, 0), 0).rgb;
+  vec3 r5 = texelFetch(ref_in, ipos + ivec2(0, 0), 0).rgb;
+  vec3 r6 = texelFetch(ref_in, ipos + ivec2(1, 0), 0).rgb;
+  vec3 r7 = texelFetch(ref_in, ipos + ivec2(-1, 1), 0).rgb;
+  vec3 r8 = texelFetch(ref_in, ipos + ivec2(0, 1), 0).rgb;
+  vec3 r9 = texelFetch(ref_in, ipos + ivec2(1, 1), 0).rgb;
 
   float coldiff = 0;
   coldiff += diff(r1, m1);
@@ -104,11 +83,25 @@ main()
 
   float d2 = coldiff * coldiff;
 
-  // variance = max(params.sigmd, variance);
-  // coldiff = coldiff * d2 / (d2 + params.dmd * params.dmd);
+  float sigmd = 0.00001;
+  variance = max(sigmd, variance);
+  float dmd = 0;
+  coldiff = coldiff * d2 / (d2 + dmd * dmd);
+  d2 = coldiff * coldiff;
+  float s = 2;
+  float t = .20;
 
-  //float R = clamp(params.s * exp(-d2 / variance) - params.t, 0, 1);
-  float R = clamp(params.s * diff(m5, r5), 0, 1);
+  // ======================================================
+  // Local motion estimation
+  float mot = texelFetch(mot_in, ipos, 0).r;
+  if (mot > .2)
+  {
+    s = 12;
+  }
+  // ======================================================
+
+  float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
+  //float R = clamp(1 * diff(m5, r5), 0, 1);
 
   imageStore(mask_out, ipos, vec4(R, R, R, R));
 }

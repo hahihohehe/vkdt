@@ -1,0 +1,4 @@
+input:read:*:*
+output:write:y:f16
+mv:read:rg:f16
+ref:read:*:*

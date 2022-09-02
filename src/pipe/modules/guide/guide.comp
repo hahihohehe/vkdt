@@ -54,7 +54,7 @@ main()
   }
   else  // assume bayer
   {
-    ivec2 blockpos = 2 * (ivec2(2 * ipos + off) / 2);
+    ivec2 blockpos = 2 * ipos + ivec2(off/2) * 2;
     float m1 = texelFetch(img_in, blockpos + ivec2(0, 0), 0).r;
     float m2 = texelFetch(img_in, blockpos + ivec2(0, 1), 0).r;
     float m3 = texelFetch(img_in, blockpos + ivec2(1, 0), 0).r;

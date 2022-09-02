@@ -15,7 +15,7 @@ check_params(
     uint32_t     parid,
     void        *oldval)
 {
-  if (parid == 6)
+  if (1 || parid == 6)
   {
     return s_graph_run_all;
   }
@@ -667,7 +667,7 @@ create_nodes(
 
     dt_connector_copy(graph, module, 2, id_debug, 0);
     dt_connector_copy(graph, module, 1, id_debug, 2);
-    dt_connector_copy(graph, module, 5, id_debug, 2);
+    // dt_connector_copy(graph, module, 5, id_debug, 2);
     dt_connector_copy(graph, module, 4, id_debug, 3);
 
     int last_lk;
@@ -736,6 +736,35 @@ create_nodes(
         if (i + 1 == lk_r)
         {
             dt_connector_copy(graph, module, 6, id_lk, 3);  // mv output
+
+            assert(graph->num_nodes < graph->max_nodes);
+            const int id_visn = graph->num_nodes++;
+            graph->node[id_visn] = (dt_node_t) {
+                    .name   = dt_token("align"),
+                    .kernel = dt_token("visn"),
+                    .module = module,
+                    .wd     = module->connector[0].roi.wd,
+                    .ht     = module->connector[0].roi.ht,
+                    .dp     = 1,
+                    .num_connectors = 2,
+                    .connector = {{
+                                          .name   = dt_token("off"),
+                                          .type   = dt_token("read"),
+                                          .chan   = dt_token("rg"),
+                                          .format = dt_token("f16"),
+                                          .roi    = module->connector[0].roi,
+                                          .connected_mi = -1,
+                                  },
+                                  {
+                                          .name   = dt_token("visn"),
+                                          .type   = dt_token("write"),
+                                          .chan   = dt_token("rgba"),
+                                          .format = dt_token("f16"),
+                                          .roi    = module->connector[0].roi,
+                                  }},
+            };
+            CONN(dt_node_connect(graph, id_lk, 3, id_visn, 0));
+            dt_connector_copy(graph, module, 5, id_visn, 1); // pass on visn
         }
 
         last_lk = id_lk;
