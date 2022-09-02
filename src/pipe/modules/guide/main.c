@@ -51,108 +51,37 @@ create_nodes(
     assert(graph->num_nodes < graph->max_nodes);
     int id_guide = graph->num_nodes++;
     graph->node[id_guide] = (dt_node_t) {
-        .name   = dt_token("guide"),
-        .kernel = dt_token("guide"),
-        .module = module,
-        .wd     = module->connector[1].roi.wd,
-        .ht     = module->connector[1].roi.ht,
-        .dp     = 1,
-        .num_connectors = 3,
-        .connector = {{
-                .name   = dt_token("input"),
-                .type   = dt_token("read"),
-                .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
-                .format = module->connector[0].format,
-                .roi    = module->connector[0].roi,
-                .connected_mi = -1,
-            },{
-                .name   = dt_token("mv"),
-                .type   = dt_token("read"),
-                .chan   = dt_token("rg"),
-                .format = dt_token("f16"),
-                .roi    = module->connector[0].roi,
-            },{
-                .name   = dt_token("output"),
-                .type   = dt_token("write"),
-                .chan   = dt_token("rgba"),
-                .format = dt_token("f16"),
-                .roi    = module->connector[1].roi,
-            }},
-        .push_constant_size = 2*sizeof(uint32_t),
-        .push_constant = { block, 1 },
+            .name   = dt_token("guide"),
+            .kernel = dt_token("guide"),
+            .module = module,
+            .wd     = module->connector[1].roi.wd,
+            .ht     = module->connector[1].roi.ht,
+            .dp     = 1,
+            .num_connectors = 3,
+            .connector = {{
+                                  .name   = dt_token("input"),
+                                  .type   = dt_token("read"),
+                                  .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
+                                  .format = module->connector[0].format,
+                                  .roi    = module->connector[0].roi,
+                                  .connected_mi = -1,
+                          },{
+                                  .name   = dt_token("mv"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[0].roi,
+                          },{
+                                  .name   = dt_token("output"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[1].roi,
+                          }},
+            .push_constant_size = 2*sizeof(uint32_t),
+            .push_constant = { block, 1 },
     };
     dt_connector_copy(graph, module, 0, id_guide, 0);
+    dt_connector_copy(graph, module, 1, id_guide, 2);
     dt_connector_copy(graph, module, 2, id_guide, 1);
-
-    assert(graph->num_nodes < graph->max_nodes);
-    int id_guide_ref = graph->num_nodes++;
-    graph->node[id_guide_ref] = (dt_node_t) {
-        .name   = dt_token("guide"),
-        .kernel = dt_token("guide"),
-        .module = module,
-        .wd     = module->connector[1].roi.wd,
-        .ht     = module->connector[1].roi.ht,
-        .dp     = 1,
-        .num_connectors = 3,
-        .connector = {{
-                .name   = dt_token("input"),
-                .type   = dt_token("read"),
-                .chan   = module->img_param.filters == 0 ? dt_token("rgba") : dt_token("rggb"),
-                .format = module->connector[0].format,
-                .roi    = module->connector[0].roi,
-                .connected_mi = -1,
-            },{
-                .name   = dt_token("mv"),
-                .type   = dt_token("read"),
-                .chan   = dt_token("rg"),
-                .format = dt_token("f16"),
-                .roi    = module->connector[0].roi,
-            },{
-                .name   = dt_token("output"),
-                .type   = dt_token("write"),
-                .chan   = dt_token("rgba"),
-                .format = dt_token("f16"),
-                .roi    = module->connector[1].roi,
-            }},
-        .push_constant_size = 2*sizeof(uint32_t),
-        .push_constant = { block, 0 },
-    };
-    dt_connector_copy(graph, module, 3, id_guide_ref, 0);
-    dt_connector_copy(graph, module, 2, id_guide_ref, 1);
-
-    assert(graph->num_nodes < graph->max_nodes);
-    int id_mask = graph->num_nodes++;
-    graph->node[id_mask] = (dt_node_t) {
-        .name   = dt_token("guide"),
-        .kernel = dt_token("mask"),
-        .module = module,
-        .wd     = module->connector[1].roi.wd,
-        .ht     = module->connector[1].roi.ht,
-        .dp     = 1,
-        .num_connectors = 3,
-        .connector = {{
-            .name   = dt_token("input"),
-            .type   = dt_token("read"),
-            .chan   = dt_token("rgba"),
-            .format = dt_token("f16"),
-            .roi    = module->connector[1].roi,
-            .connected_mi = -1,
-        },{
-            .name   = dt_token("ref"),
-            .type   = dt_token("read"),
-            .chan   = dt_token("rgba"),
-            .format = dt_token("f16"),
-            .roi    = module->connector[1].roi,
-        },{
-            .name   = dt_token("output"),
-            .type   = dt_token("write"),
-            .chan   = dt_token("rgba"),
-            .format = dt_token("f16"),
-            .roi    = module->connector[1].roi,
-        }},
-    };
-    CONN(dt_node_connect(graph, id_guide, 2, id_mask, 0));
-    CONN(dt_node_connect(graph, id_guide_ref, 2, id_mask, 1));
-    dt_connector_copy(graph, module, 1, id_mask, 2);
-
 }
