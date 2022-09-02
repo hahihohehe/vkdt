@@ -191,6 +191,34 @@ create_nodes(
     CONN(dt_node_connect(graph, id_guide, 2, id_mask, 0));
     CONN(dt_node_connect(graph, id_guide_ref, 2, id_mask, 1));
     CONN(dt_node_connect(graph, id_mot, 1, id_mask, 2));
-    dt_connector_copy(graph, module, 1, id_mask, 3);
+
+    assert(graph->num_nodes < graph->max_nodes);
+    int id_min5 = graph->num_nodes++;
+    graph->node[id_min5] = (dt_node_t) {
+            .name   = dt_token("guide"),
+            .kernel = dt_token("min5"),
+            .module = module,
+            .wd     = module->connector[1].roi.wd,
+            .ht     = module->connector[1].roi.ht,
+            .dp     = 1,
+            .num_connectors = 2,
+            .connector = {{
+                                  .name   = dt_token("input"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("y"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[1].roi,
+                                  .connected_mi = -1,
+                          },{
+                                  .name   = dt_token("output"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("y"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[1].roi,
+                          }},
+    };
+    CONN(dt_node_connect(graph, id_mask, 3, id_min5, 0));
+
+    dt_connector_copy(graph, module, 1, id_min5, 1);
 
 }
