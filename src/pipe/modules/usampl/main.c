@@ -28,8 +28,10 @@ void modify_roi_out(
     roi_out.full_ht /= down;
     roi_out.wd /= down;
     roi_out.ht /= down;
+    roi_out.scale = 1.0f;
 
     module->connector[1].roi = roi_out;
+    module->connector[2].roi = roi_out;
 }
 
 void
@@ -46,7 +48,7 @@ create_nodes(
             .wd     = module->connector[1].roi.wd,
             .ht     = module->connector[1].roi.ht,
             .dp     = 1,
-            .num_connectors = 2,
+            .num_connectors = 3,
             .connector = {{
                                   .name   = dt_token("input"),
                                   .type   = dt_token("read"),
@@ -60,8 +62,15 @@ create_nodes(
                                   .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
                                   .roi    = module->connector[1].roi,
+                          },{
+                                  .name   = dt_token("mv"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[1].roi,
                           }},
     };
     dt_connector_copy(graph, module, 0, id_down, 0);
     dt_connector_copy(graph, module, 1, id_down, 1);
+    dt_connector_copy(graph, module, 2, id_down, 2);
 }

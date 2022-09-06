@@ -21,6 +21,10 @@ layout( // output rgba
 set = 1, binding = 1
 ) uniform writeonly image2D img_out;
 
+layout( // output motion vectors
+set = 1, binding = 2
+) uniform writeonly image2D img_off;
+
 void
 main()
 {
@@ -45,4 +49,7 @@ main()
 
   imageStore(img_out, ipos, vec4(col, 1));
   // imageStore(img_out, ipos, texelFetch(img_in, ipos, 0));
+
+  vec2 mv = off / params.down;
+  imageStore(img_off, ipos, vec4(mv, mv));
 }
