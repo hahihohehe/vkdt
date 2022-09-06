@@ -58,7 +58,7 @@ create_nodes(
   const dt_image_params_t *img_param = dt_module_get_input_img_param(graph, module, dt_token("input"));
   if(!img_param) return;
   assert(img_param);
-  for(int k=0;k<4;k++)
+  for(int k=0;k<4;k++)  // TODO: do these changes actually get propagated
   { // we will take care of this:
     module->img_param.black[k] = 0.0;
     module->img_param.white[k] = 1.0;
