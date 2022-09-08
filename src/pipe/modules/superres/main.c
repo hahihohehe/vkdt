@@ -48,6 +48,8 @@ void modify_roi_out(
 
     module->connector[OUTPUT+1].roi.full_wd = (ri->full_wd + 1) / 2;
     module->connector[OUTPUT+1].roi.full_ht = (ri->full_ht + 1) / 2;
+
+    module->img_param.filters = 0u;     // no more mosaic after this module
 }
 
 dt_graph_run_t
@@ -65,6 +67,7 @@ create_nodes(
         dt_module_t *module) {
     dt_roi_t *ri = &module->connector[0].roi;
     dt_roi_t *ro = &module->connector[OUTPUT].roi;
+    const dt_image_params_t* img_params = dt_module_get_input_img_param(graph, module, dt_token("input"));
 
     assert(graph->num_nodes < graph->max_nodes);
     int id_grad = graph->num_nodes++;
@@ -110,7 +113,7 @@ create_nodes(
             .connector = {{
                                   .name   = dt_token("img"),
                                   .type   = dt_token("read"),
-                                  .chan   = dt_token("rggb"),
+                                  .chan   = img_params->filters == 0 ? dt_token("rgba") : dt_token("rggb"),
                                   .format = dt_token("*"),
                                   .roi    = *ri,
                                   .connected_mi = -1,
@@ -139,7 +142,7 @@ create_nodes(
                           }},
             .push_constant_size = sizeof(uint32_t),
             .push_constant = {
-                    module->img_param.filters,
+                    img_params->filters,
             },
     };
     dt_connector_copy(graph, module, 0, id_cf, 0);
@@ -168,7 +171,7 @@ create_nodes(
               .connector = {{
                                 .name   = dt_token("img"),
                                 .type   = dt_token("read"),
-                                .chan   = dt_token("rggb"),
+                                .chan   = img_params->filters == 0 ? dt_token("rgba") : dt_token("rggb"),
                                 .format = dt_token("*"),
                                 .roi    = *ri,
                                 .connected_mi = -1,
@@ -198,7 +201,7 @@ create_nodes(
                     .connector = {{
                                           .name   = dt_token("img"),
                                           .type   = dt_token("read"),
-                                          .chan   = dt_token("rggb"),
+                                          .chan   = img_params->filters == 0 ? dt_token("rgba") : dt_token("rggb"),
                                           .format = dt_token("*"),
                                           .roi    = *ri,
                                           .connected_mi = -1,
@@ -256,7 +259,7 @@ create_nodes(
                                   }},
                     .push_constant_size = 2 * sizeof(uint32_t),
                     .push_constant = {
-                            module->img_param.filters,
+                            img_params->filters,
                             (uint32_t) i + 1,
                     },
             };
@@ -325,7 +328,7 @@ create_nodes(
                           }},
             .push_constant_size = sizeof(uint32_t),
             .push_constant = {
-                    module->img_param.filters,
+                    img_params->filters,
             },
     };
     if (num_connected == 0)
@@ -338,6 +341,38 @@ create_nodes(
         CONN(dt_node_connect(graph, id_combine_prev, 6, id_norm, 0));     // acc
         CONN(dt_node_connect(graph, id_combine_prev, 7, id_norm, 1));     // cont
     }
+
+    // connect debug output
+    assert(graph->num_nodes < graph->max_nodes);
+    int id_visn = graph->num_nodes++;
+    dt_node_t *node_visn = graph->node + id_visn;
+    *node_visn = (dt_node_t) {
+            .name   = dt_token("superres"),
+            .kernel = dt_token("visn"),
+            .module = module,
+            .wd     = module->connector[OUTPUT+1].roi.wd,
+            .ht     = module->connector[OUTPUT+1].roi.ht,
+            .dp     = 1,
+            .num_connectors = 2,
+            .connector = {{
+                                  .name   = dt_token("img"),
+                                  .type   = dt_token("read"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[OUTPUT+1].roi,
+                                  .connected_mi = -1,
+                          },
+                          {
+                                  .name   = dt_token("grad"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = module->connector[OUTPUT+1].roi,
+                          }},
+    };
+    int f = dt_module_param_int(module, dt_module_get_param(module->so, dt_token("image")))[0];
+    dt_connector_copy(graph, module, 1+3*f+1, id_visn, 0);
+    dt_connector_copy(graph, module, OUTPUT+1, id_visn, 1);
 
     if (1 || module->connector[OUTPUT].roi.scale == 1.0) {
         // no resampling needed
