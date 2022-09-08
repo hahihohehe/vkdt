@@ -30,9 +30,21 @@ layout( // input buffer rgb coarse offset (dx dy dist)
     set = 1, binding = 2
 ) uniform sampler2D img_off;
 
+#ifdef DT_ALIGN_SHIFT3
 layout( // output buffer grey distance
-    set = 1, binding = 3
+set = 1, binding = 3
+) uniform writeonly image2D img_out[49];
+#else
+#ifdef DT_ALIGN_SHIFT4
+layout( // output buffer grey distance
+set = 1, binding = 3
+) uniform writeonly image2D img_out[81];
+#else
+layout( // output buffer grey distance
+set = 1, binding = 3
 ) uniform writeonly image2D img_out[25];
+#endif
+#endif
 
 // write to offset image the abs distance between the two images,
 // where i1 is shifted by an offset (as in push constants) plus

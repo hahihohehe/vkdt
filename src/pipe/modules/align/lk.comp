@@ -47,36 +47,7 @@ main()
   vec2 change = vec2(0, 0);
   float divisor = 0;
 
-  if (false && push.scale == 0)
   {
-    // this stategy only works for demosaiced input
-    for (int i = -1; i <= 1; i++)
-    {
-      for (int j = -1; j <= 1; j++)
-      {
-        ivec2 displ = ivec2(i, j);
-        float G = length(texelFetch(G_in, ipos + displ, 0).rgb);
-        float F = length(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
-
-        // strategy for calculating I_F needs to be replaced for bayer mosaic
-        float F_1 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k), 0).rgb);
-        float F_2 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 0), 0).rgb);
-        float F_3 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(0, 1), 0).rgb);
-        float F_4 = length(texelFetch(F_in, ivec2(vec2(ipos + displ) + h_k) + ivec2(1, 1), 0).rgb);
-
-        vec2 sub = vec2(ivec2(vec2(ipos + displ) + h_k)) - (vec2(ipos + displ) + h_k);
-
-        vec2 I_F = vec2((F_2 - F_1) * (1 - sub.y) + (F_4 - F_3) * sub.y, (F_3 - F_1) * (1 - sub.y) + (F_4 - F_2) * sub.y);
-        //vec2 I_F = vec2(3, 3);
-
-        change += I_F * (G - F);
-        //change += I_F;
-        divisor += dot(I_F, I_F);
-      }
-    }
-  }
-  else  // raw input
-  {   // this implementation is for bayer pattern only
     for (int i = -PATCH_RAD; i <= PATCH_RAD; i++)
     {
       for (int j = -PATCH_RAD; j <= PATCH_RAD; j++)
@@ -86,7 +57,7 @@ main()
         float F = lum(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
 
         // middle of 9 x 9 block
-        ivec2 mid_pos = ivec2(/*vec2(.5, .5) +*/ ipos + displ + h_k);
+        ivec2 mid_pos = ivec2(vec2(.5, .5) + ipos + displ + h_k);
 
         // strategy for calculating I_F needs to be replaced for bayer mosaic
         /*float F_1 = lum(texelFetch(F_in, mid_pos + ivec2(-1, -1), 0).rgb);
@@ -131,7 +102,8 @@ main()
 
   change /= divisor;
 
-  change = clamp(change, -.5, .5);
+  change = clamp(change, -1, 1);
+  // change *= .3;
 
   vec2 h_k1 = h_k + 1 * change;
 

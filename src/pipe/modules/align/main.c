@@ -336,7 +336,7 @@ create_nodes(
           .wd     = roi[1].wd,
           .ht     = roi[1].ht,
           .dp     = 1,
-          .num_connectors = 5,
+          .num_connectors = 4,
           .connector = {{
                             .name   = dt_token("F"),
                             .type   = dt_token("read"),
@@ -473,7 +473,7 @@ create_nodes(
           .wd     = roi[0].wd,
           .ht     = roi[0].ht,
           .dp     = 1,
-          .num_connectors = 5,
+          .num_connectors = 4,
           .connector = {{
                             .name   = dt_token("F"),
                             .type   = dt_token("read"),
@@ -556,7 +556,7 @@ create_nodes(
                               .name   = dt_token("visn"),
                               .type   = dt_token("write"),
                               .chan   = dt_token("rgba"),
-                              .format = dt_token("f16"),
+                              .format = dt_token("ui8"),
                               .roi    = roi[0],
                           }},
         };
