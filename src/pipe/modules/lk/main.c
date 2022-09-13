@@ -44,6 +44,7 @@ create_nodes(
 
     dt_roi_t roi_in = module->connector[0].roi;
     const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
+    // const int block = 2;
     printf("lk block size: %i\n", block);
 
     dt_roi_t roi_block = roi_in;
@@ -194,11 +195,6 @@ create_nodes(
                                       .format = dt_token("f16"),
                                       .roi    = roi_block,
                               }},
-                .push_constant_size = 2 * sizeof(uint32_t),
-                .push_constant = {
-                        module->img_param.filters,
-                        block
-                },
         };
 
         // connect F and G

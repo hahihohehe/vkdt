@@ -7,12 +7,6 @@
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
-layout(push_constant, std140) uniform push_t
-{
-  uint filters;
-  int  scale;
-} push;
-
 layout( // input buffer rggb / rgba
 set = 1, binding = 0
 ) uniform sampler2D F_in;
@@ -28,11 +22,6 @@ set = 1, binding = 2
 layout( // output motion vectors
 set = 1, binding = 3
 ) uniform writeonly image2D off_out;
-
-float lum(vec3 rgb)
-{
-  return dot(rgb, vec3(.333, .333, .333));
-}
 
 #define PATCH_RAD 0
 
@@ -53,8 +42,8 @@ main()
       for (int j = -PATCH_RAD; j <= PATCH_RAD; j++)
       {
         ivec2 displ = ivec2(i, j);
-        float G = lum(texelFetch(G_in, ipos + displ, 0).rgb);
-        float F = lum(texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).rgb);
+        float G = texelFetch(G_in, ipos + displ, 0).r;
+        float F = texture(F_in, (ipos + displ + vec2(.5, .5) + h_k) / textureSize(F_in, 0)).r;
 
         // middle of 9 x 9 block
         ivec2 mid_pos = ivec2(vec2(.5, .5) + ipos + displ + h_k);
@@ -83,10 +72,10 @@ main()
         I_F /= 2;*/
 
         // alternative strategy
-        float F_1 = lum(texelFetch(F_in, mid_pos + ivec2(0, 1), 0).rgb);
-        float F_2 = lum(texelFetch(F_in, mid_pos + ivec2(1, 0), 0).rgb);
-        float F_3 = lum(texelFetch(F_in, mid_pos + ivec2(0, -1), 0).rgb);
-        float F_4 = lum(texelFetch(F_in, mid_pos + ivec2(-1, 0), 0).rgb);
+        float F_1 = texelFetch(F_in, mid_pos + ivec2(0, 1), 0).r;
+        float F_2 = texelFetch(F_in, mid_pos + ivec2(1, 0), 0).r;
+        float F_3 = texelFetch(F_in, mid_pos + ivec2(0, -1), 0).r;
+        float F_4 = texelFetch(F_in, mid_pos + ivec2(-1, 0), 0).r;
 
         vec2 I_F = .5 * vec2(F_2 - F_4, F_1 - F_3);
 
