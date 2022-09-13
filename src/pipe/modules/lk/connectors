@@ -2,6 +2,6 @@ input:read:*:*
 output:write:&input:f16
 alignsrc:read:*:*
 aligndst:read:*:*
-visn:write:rgba:ui8
+visn:write:rgba:f16
 mv_in:read:rg:f16
 mv:write:rg:f16

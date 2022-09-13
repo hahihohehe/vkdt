@@ -1,0 +1,43 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint block;
+  uint connected;
+} push;
+
+layout( // input offsets
+    set = 1, binding = 0
+) uniform sampler2D img_in;
+
+layout( // output offsets, half size
+    set = 1, binding = 1
+) uniform writeonly image2D img_out;
+
+// output interpolated offset vector
+void
+main()
+{
+  ivec2 opos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(opos, imageSize(img_out)))) return;
+
+  vec2 i0 = vec2(0, 0);
+  if (push.connected > 0)
+  {
+    if (push.block == 2)
+    {
+      vec2 i0 = texture(img_in, (2 * opos) + vec2(1, 1) / vec2(textureSize(img_in, 0))).rg;
+    }
+    else
+    {
+      vec2 i0 = texelFetch(img_in, opos, 0).rg;
+    }
+  }
+  imageStore(img_out, opos, vec4(i0, i0));
+}

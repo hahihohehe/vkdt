@@ -47,14 +47,17 @@ create_nodes(
     const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
 
     dt_roi_t roi_block = roi_in;
-    roi_block.full_wd += block - 1;
-    roi_block.full_wd /= block;
-    roi_block.full_ht += block - 1;
-    roi_block.full_ht /= block;
-    roi_block.wd += block - 1;
-    roi_block.wd /= block;
-    roi_block.ht += block - 1;
-    roi_block.ht /= block;
+    if (block != 1)
+    {
+        roi_block.full_wd += block - 1;
+        roi_block.full_wd /= block;
+        roi_block.full_ht += block - 1;
+        roi_block.full_ht /= block;
+        roi_block.wd += block - 1;
+        roi_block.wd /= block;
+        roi_block.ht += block - 1;
+        roi_block.ht /= block;
+    }
 
     // ========================================================================
     // ========= create grayscale images ======================================
@@ -68,7 +71,7 @@ create_nodes(
         assert(graph->num_nodes < graph->max_nodes);
         id_half[k] = graph->num_nodes++;
         graph->node[id_half[k]] = (dt_node_t) {
-                .name   = dt_token("align"),
+                .name   = dt_token("lk"),
                 .kernel = dt_token("half"),
                 .module = module,
                 .wd     = roi_block.wd,
@@ -99,6 +102,49 @@ create_nodes(
         dt_connector_copy(graph, module, 2+k, id_half[k], 0);
     }
 
+    // ========================================================================
+    // ========= rescale input offsets (img size -> block size) ===============
+    // ========================================================================
+    // currently only for rgb and bayer input data
+    assert(graph->num_nodes < graph->max_nodes);
+    int id_mv = graph->num_nodes++;
+    graph->node[id_mv] = (dt_node_t) {
+            .name   = dt_token("lk"),
+            .kernel = dt_token("mvprep"),
+            .module = module,
+            .wd     = roi_block.wd,
+            .ht     = roi_block.ht,
+            .dp     = 1,
+            .num_connectors = 2,
+            .connector = {{
+                                  .name   = dt_token("input"),
+                                  .type   = dt_token("read"),
+                                  .chan   = module->connector[5].connected_mi > 0 ? dt_token("rg") : block > 1 ? dt_token("rggb") : dt_token("rgba"),
+                                  .format = dt_token("f16"),
+                                  .roi    = roi_in,
+                                  .connected_mi = -1,
+                          },
+                          {
+                                  .name   = dt_token("output"),
+                                  .type   = dt_token("write"),
+                                  .chan   = dt_token("rg"),
+                                  .format = dt_token("f16"),
+                                  .roi    = roi_block,
+                          }},
+            .push_constant_size = 2 * sizeof(uint32_t),
+            .push_constant = {block, module->connector[5].connected_mi > 0},
+    };
+
+    if (module->connector[5].connected_mi > 0)
+    {
+        dt_connector_copy(graph, module, 5, id_mv, 0);
+    }
+    else
+    {
+        dt_connector_copy(graph, module, 0, id_mv, 0);
+    }
+
+
 
     // ========================================================================
     // ========= run lucas kanade =============================================
@@ -108,7 +154,7 @@ create_nodes(
         assert(graph->num_nodes < graph->max_nodes);
         const int id_lk = graph->num_nodes++;
         graph->node[id_lk] = (dt_node_t) {
-                .name   = dt_token("align"),
+                .name   = dt_token("lk"),
                 .kernel = dt_token("lk"),
                 .module = module,
                 .wd     = roi_block.wd,
@@ -134,7 +180,7 @@ create_nodes(
                               {
                                       .name   = dt_token("off"),
                                       .type   = dt_token("read"),
-                                      .chan   = (i > 0 || module->connector[5].connected_mi > 0) ? dt_token("rg") : dt_token("y"),
+                                      .chan   = dt_token("rg"),
                                       .format = dt_token("f16"),
                                       .roi    = roi_block,
                                       .connected_mi = -1,
@@ -165,16 +211,7 @@ create_nodes(
         }
         else
         {
-            // is mv_in connected?
-            if (module->connector[5].connected_mi > 0)
-            {
-                dt_connector_copy(graph, module, 5, id_lk, 2);
-            }
-            else
-            {
-                // connect dummy input
-                CONN(dt_node_connect(graph, id_half[1], 1, id_lk, 2));
-            }
+            CONN(dt_node_connect(graph, id_mv, 1, id_lk, 2));
         }
 
         last_lk = id_lk;
@@ -186,7 +223,7 @@ create_nodes(
     assert(graph->num_nodes < graph->max_nodes);
     const int id_warp = graph->num_nodes++;
     graph->node[id_warp] = (dt_node_t) {
-            .name   = dt_token("align"),
+            .name   = dt_token("lk"),
             .kernel = dt_token("warp"),
             .module = module,
             .wd     = roi_in.wd,
@@ -206,7 +243,6 @@ create_nodes(
                                   .chan   = dt_token("rg"),
                                   .format = dt_token("f16"),
                                   .roi    = roi_block,
-                                  .flags  = s_conn_smooth,
                                   .connected_mi = -1,
                           },{
                                   .name   = dt_token("output"),
@@ -218,7 +254,7 @@ create_nodes(
                                   .name   = dt_token("visn"),
                                   .type   = dt_token("write"),
                                   .chan   = dt_token("rgba"),
-                                  .format = dt_token("ui8"),
+                                  .format = dt_token("f16"),
                                   .roi    = roi_in,
                           },{
                                   .name   = dt_token("mv"),
@@ -234,18 +270,15 @@ create_nodes(
             },
     };
 
-    // in case the 'rounds' parameter is 0 no lk kernel was run
+    dt_connector_copy(graph, module, 0, id_warp, 0);
+    dt_connector_copy(graph, module, 4, id_warp, 3);
+    dt_connector_copy(graph, module, 1, id_warp, 2);
+    dt_connector_copy(graph, module, 6, id_warp, 4);
+
     if (lk_r == 0)
     {
-        // is mv_in connected?
-        if (module->connector[5].connected_mi > 0)
-        {
-            dt_connector_copy(graph, module, 5, id_warp, 1);
-        }
-        else
-        {
-            // connect dummy input
-            CONN(dt_node_connect(graph, id_half[1], 1, id_warp, 1));
-        }
+        CONN(dt_node_connect(graph, id_mv, 1, id_warp, 1));
+    } else {
+        CONN(dt_node_connect(graph, last_lk, 3, id_warp, 1));
     }
 }
