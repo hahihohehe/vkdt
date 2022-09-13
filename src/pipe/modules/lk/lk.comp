@@ -11,7 +11,6 @@ layout(push_constant, std140) uniform push_t
 {
   uint filters;
   int  scale;
-  uint hasoff;
 } push;
 
 layout( // input buffer rggb / rgba
@@ -35,7 +34,7 @@ float lum(vec3 rgb)
   return dot(rgb, vec3(.333, .333, .333));
 }
 
-#define PATCH_RAD 1
+#define PATCH_RAD 0
 
 void
 main()
@@ -43,10 +42,7 @@ main()
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(ipos, imageSize(off_out)))) return;
 
-  vec2 h_k = vec2(0, 0);
-  if (push.hasoff != 0) {
-    h_k = texelFetch(off_in, ipos, 0).xy;
-  }
+  vec2 h_k = texelFetch(off_in, ipos, 0).xy;
 
   vec2 change = vec2(0, 0);
   float divisor = 0;
@@ -97,6 +93,8 @@ main()
 
         I_F *= vec2(1, 1);
 
+        vec2 diff = I_F * (G - F);
+
         change += I_F * (G - F);
         // divisor += clamp(dot(I_F, I_F), .5, 20);   // lower bound is to prevent huge steps
         divisor += dot(I_F, I_F);
@@ -104,7 +102,14 @@ main()
     }
   }
 
-  change /= divisor;
+  if (divisor > 0)
+  {
+    change /= divisor;
+  }
+  else  // prefer no change if divisor is 0, otherwise the shift would be huge
+  {
+    change = vec2(0, 0);
+  }
 
   change = clamp(change, -1, 1);
   // change *= .3;

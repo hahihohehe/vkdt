@@ -14,24 +14,23 @@ check_params(
 void modify_roi_in(
         dt_graph_t *graph,
         dt_module_t *module) {
-    module->connector[4].roi.wd = module->connector[4].roi.full_wd;
+    /*module->connector[4].roi.wd = module->connector[4].roi.full_wd;
     module->connector[4].roi.ht = module->connector[4].roi.full_ht;
     module->connector[4].roi.scale = 1.0f;
     module->connector[6].roi.wd = module->connector[6].roi.full_wd;
     module->connector[6].roi.ht = module->connector[6].roi.full_ht;
-    module->connector[6].roi.scale = 1.0f;
+    module->connector[6].roi.scale = 1.0f;*/
     module->connector[0].roi = module->connector[1].roi;
     module->connector[2].roi = module->connector[1].roi;
     module->connector[3].roi = module->connector[1].roi;
-    module->connector[5].roi = module->connector[1].roi;
+    module->connector[4].roi = module->connector[1].roi;
 }
 
 void modify_roi_out(
         dt_graph_t *graph,
         dt_module_t *module) {
     module->connector[1].roi = module->connector[0].roi;
-    module->connector[4].roi = module->connector[0].roi;
-    module->connector[6].roi = module->connector[0].roi;
+    module->connector[5].roi = module->connector[0].roi;
 }
 
 // input connectors: fixed raw file
@@ -45,6 +44,7 @@ create_nodes(
 
     dt_roi_t roi_in = module->connector[0].roi;
     const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
+    printf("lk block size: %i\n", block);
 
     dt_roi_t roi_block = roi_in;
     if (block != 1)
@@ -119,7 +119,7 @@ create_nodes(
             .connector = {{
                                   .name   = dt_token("input"),
                                   .type   = dt_token("read"),
-                                  .chan   = module->connector[5].connected_mi > 0 ? dt_token("rg") : block > 1 ? dt_token("rggb") : dt_token("rgba"),
+                                  .chan   = module->connector[4].connected_mi > 0 ? dt_token("rg") : block > 1 ? dt_token("rggb") : dt_token("rgba"),
                                   .format = dt_token("f16"),
                                   .roi    = roi_in,
                                   .connected_mi = -1,
@@ -132,16 +132,18 @@ create_nodes(
                                   .roi    = roi_block,
                           }},
             .push_constant_size = 2 * sizeof(uint32_t),
-            .push_constant = {block, module->connector[5].connected_mi > 0},
+            .push_constant = {block, module->connector[4].connected_mi},
     };
 
-    if (module->connector[5].connected_mi > 0)
+    if (module->connector[4].connected_mi > 0)
     {
-        dt_connector_copy(graph, module, 5, id_mv, 0);
+        dt_connector_copy(graph, module, 4, id_mv, 0);
+        printf("mv_in connected\n");
     }
     else
     {
         dt_connector_copy(graph, module, 0, id_mv, 0);
+        printf("mv_in disconnected\n");
     }
 
 
@@ -192,11 +194,10 @@ create_nodes(
                                       .format = dt_token("f16"),
                                       .roi    = roi_block,
                               }},
-                .push_constant_size = 3 * sizeof(uint32_t),
+                .push_constant_size = 2 * sizeof(uint32_t),
                 .push_constant = {
                         module->img_param.filters,
-                        block,
-                        i > 0 || module->connector[5].connected_mi > 0
+                        block
                 },
         };
 
@@ -270,10 +271,10 @@ create_nodes(
             },
     };
 
-    dt_connector_copy(graph, module, 0, id_warp, 0);
-    dt_connector_copy(graph, module, 4, id_warp, 3);
-    dt_connector_copy(graph, module, 1, id_warp, 2);
-    dt_connector_copy(graph, module, 6, id_warp, 4);
+    dt_connector_copy(graph, module, 0, id_warp, 0);    // input
+    //dt_connector_copy(graph, module, 1, id_warp, 3);    // visn
+    dt_connector_copy(graph, module, 1, id_warp, 2);    // warped output
+    dt_connector_copy(graph, module, 5, id_warp, 4);    // mv out
 
     if (lk_r == 0)
     {
