@@ -26,6 +26,18 @@ set = 1, binding = 2
 ) uniform writeonly image2D img_off;
 
 void
+eval_gauss(
+vec4 cov, vec2 off,
+out float weight)
+{
+  dvec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
+  dmat2 E = dmat2(cov.z, -cov.w,
+  cov.w,  cov.z);
+  dvec2 of = E * off;
+  weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1);
+}
+
+void
 main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
@@ -37,15 +49,20 @@ main()
   sposbase += off;
 
   vec3 col = vec3(0, 0, 0);
+  float wsum = 0;
   for (int i = 0; i < params.down; i++)
   {
     for (int j = 0; j < params.down; j++)
     {
-      col += texelFetch(img_in, sposbase + ivec2(i, j), 0).rgb;
+      float weight;
+      eval_gauss(vec4(.3, .3, 1, 0), vec2(i - .5 * (params.down - 1), j - .5 * (params.down - 1)), weight);
+      wsum += weight;
+      col += weight * texelFetch(img_in, sposbase + ivec2(i, j), 0).rgb;
     }
   }
 
-  col /= (params.down * params.down);
+  //col /= (params.down * params.down);
+  col /= wsum;
 
   imageStore(img_out, ipos, vec4(col, 1));
   // imageStore(img_out, ipos, texelFetch(img_in, ipos, 0));
