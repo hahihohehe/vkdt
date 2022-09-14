@@ -48,6 +48,16 @@ main()
   off.x = params.image - (off.y * params.down);
   sposbase += off;
 
+  // add an extra shift offset to test superres module
+  ivec2 aoff = ivec2(0, 0);
+  if (params.image != 0)
+  {
+    int x = 73 * params.image / 20;
+    int y = 13 * params.image / 20;
+    aoff = ivec2(73 * params.image - 20 * x - 10, 10 + 20 * y - 13 * params.image);
+    sposbase += aoff * params.down;
+  }
+
   vec3 col = vec3(0, 0, 0);
   float wsum = 0;
   for (int i = 0; i < params.down; i++)
@@ -67,6 +77,6 @@ main()
   imageStore(img_out, ipos, vec4(col, 1));
   // imageStore(img_out, ipos, texelFetch(img_in, ipos, 0));
 
-  vec2 mv = vec2(off) / params.down;
+  vec2 mv = (vec2(off) / params.down) + aoff;
   imageStore(img_off, ipos, vec4(mv, mv));
 }
