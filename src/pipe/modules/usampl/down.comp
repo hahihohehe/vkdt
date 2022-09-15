@@ -3,6 +3,7 @@
 #extension GL_EXT_nonuniform_qualifier    : enable
 
 #include "shared.glsl"
+#include "config.h"
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
@@ -37,6 +38,30 @@ out float weight)
   weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1);
 }
 
+vec4
+color_vec(    // get a normalized vector with one of r, g, b being 1, all other entries 0 according to bayer mosaic
+ivec2 ipos
+)
+{
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);// offset inside block
+  if (boff == ivec2(1, 0))
+  { // green
+    return vec4(0, 1, 0, 0);
+  }
+  else if (boff == ivec2(0, 1))
+  { // green
+    return vec4(0, 1, 0, 0);
+  }
+  else if (boff == ivec2(0, 0))
+  { // red
+    return vec4(1, 0, 0, 0);
+  }
+  else
+  { // blue
+    return vec4(0, 0, 1, 0);
+  }
+}
+
 void
 main()
 {
@@ -52,9 +77,14 @@ main()
   ivec2 aoff = ivec2(0, 0);
   if (params.image != 0)
   {
-    int x = 73 * params.image / 20;
-    int y = 13 * params.image / 20;
-    aoff = ivec2(73 * params.image - 20 * x - 10, 10 + 20 * y - 13 * params.image);
+    int x = 73 * params.image / 15;
+    int y = 13 * params.image / 15;
+    aoff = ivec2(73 * params.image - 15 * x - 7, 8 + 15 * y - 13 * params.image);
+    sposbase += aoff * params.down;
+  }
+  if (false && params.image > 4)
+  {
+    aoff = ivec2(1, 0);
     sposbase += aoff * params.down;
   }
 
@@ -74,8 +104,12 @@ main()
   //col /= (params.down * params.down);
   col /= wsum;
 
+#ifndef DT_USMPL_RGGB
   imageStore(img_out, ipos, vec4(col, 1));
-  // imageStore(img_out, ipos, texelFetch(img_in, ipos, 0));
+#else
+  float c = dot(color_vec(ipos), vec4(col, 0));
+  imageStore(img_out, ipos, vec4(c, c, c, c));
+#endif
 
   vec2 mv = (vec2(off) / params.down) + aoff;
   imageStore(img_off, ipos, vec4(mv, mv));
