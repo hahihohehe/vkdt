@@ -104,12 +104,13 @@ main()
 
   vec3 col = vec3(0, 0, 0);
   float wsum = 0;
-  for (int i = 0; i < params.down; i++)
+  // overlap by one px
+  for (int i = 0; i < params.down + 2; i++)
   {
-    for (int j = 0; j < params.down; j++)
+    for (int j = 0; j < params.down + 2; j++)
     {
       float weight;
-      eval_gauss(vec4(.3, .3, 1, 0), vec2(i - .5 * (params.down - 1), j - .5 * (params.down - 1)), weight);
+      eval_gauss(vec4(.6, .6, 1, 0), vec2(i - .5 * (params.down - 1) - 1, j - .5 * (params.down - 1) - 1), weight);
       wsum += weight;
       col += weight * texelFetch(img_in, sposbase + ivec2(i, j), 0).rgb;
     }
