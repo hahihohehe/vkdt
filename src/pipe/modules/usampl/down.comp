@@ -91,14 +91,19 @@ main()
     sposbase += aoff * params.down;
   }
 
-  if (params.image % 4 == 1)
+  if (params.image == 1 || params.image == 7)
   {
     aoff = ivec2(1, 0);
     sposbase += aoff * params.down;
   }
-  else if (params.image % 4 == 3)
+  else if (params.image == 3 || params.image == 5)
   {
     aoff = ivec2(0, 1);
+    sposbase += aoff * params.down;
+  }
+  else if (params.image == 4)
+  {
+    aoff = ivec2(1, 1);
     sposbase += aoff * params.down;
   }
 
