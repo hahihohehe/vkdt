@@ -66,16 +66,19 @@ void
 main()
 {
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
-  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+  ivec2 spos = ipos;
 
-  ivec2 sposbase = params.down * ipos;
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+  if(any(greaterThanEqual(spos, imageSize(img_out)))) return;
+
+  ivec2 sposbase = params.down * spos;
   ivec2 off = ivec2(0, params.image / params.down);
   off.x = params.image - (off.y * params.down);
   sposbase += off;
 
   // add an extra shift offset to test superres module
   ivec2 aoff = ivec2(0, 0);
-  if (params.image != 0)
+  if (false && params.image != 0)
   {
     int x = 73 * params.image / 15;
     int y = 13 * params.image / 15;
@@ -85,6 +88,17 @@ main()
   if (false && params.image > 4)
   {
     aoff = ivec2(1, 0);
+    sposbase += aoff * params.down;
+  }
+
+  if (params.image % 4 == 1)
+  {
+    aoff = ivec2(1, 0);
+    sposbase += aoff * params.down;
+  }
+  else if (params.image % 4 == 3)
+  {
+    aoff = ivec2(0, 1);
     sposbase += aoff * params.down;
   }
 
