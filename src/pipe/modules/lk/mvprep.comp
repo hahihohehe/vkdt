@@ -32,11 +32,11 @@ main()
   {
     if (push.block == 2)
     {
-      vec2 i0 = texture(img_in, (2 * opos) + vec2(1, 1) / vec2(textureSize(img_in, 0))).rg;
+      i0 = .5 * texture(img_in, ((2 * opos) + vec2(1, 1)) / vec2(textureSize(img_in, 0))).rg;
     }
     else
     {
-      vec2 i0 = texelFetch(img_in, opos, 0).rg;
+      i0 = texelFetch(img_in, opos, 0).rg;
     }
   }
   imageStore(img_out, opos, vec4(i0, i0));
