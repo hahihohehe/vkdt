@@ -1,0 +1,6 @@
+input:read:*:*
+output:write:*:f16
+alignsrc:read:*:*
+aligndst:read:*:*
+mv_in:read:rg:f16
+mv:write:rg:f16
