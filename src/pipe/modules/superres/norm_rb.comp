@@ -1,0 +1,98 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+  float inc;
+  float sup;
+  float rot;
+  float ani;
+  float mask;
+  float off;
+  int image;
+  float k_det;
+  float k_den;
+  float k_stret;
+  float k_shri;
+  float d_th;
+  float d_tr;
+  int gauss;
+  int pointc;
+} params;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+} push;
+
+layout( // input rgb accumulation buffer
+    set = 1, binding = 0
+) uniform sampler2D acc;
+
+layout( // input weights
+set = 1, binding = 1
+) uniform sampler2D cont;
+
+layout( // output f16 buffer rgb
+    set = 1, binding = 2
+) uniform writeonly image2D img_out;
+
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+
+  vec4 col = texelFetch(acc, ipos, 0);
+  vec4 weight = texelFetch(cont, ipos, 0);
+
+  if (weight.r == 0.0)
+  weight.r = 1;
+  if (weight.g == 0.0)
+  weight.g = 1;
+  if (weight.b == 0.0)
+  weight.b = 1;
+
+  // mask visualisation
+  float w = weight.r + weight.g + weight.b;
+  w /= 4.0;
+  w *= params.mask;
+  w += (1 - params.mask);
+  // vec4 col_mask = vec4(1.0 - w, w, 0, 1);
+
+  // color reconstruction
+  //weight.g *= 2;
+  // weight *= 10;
+
+  // Do not boost contribution, only lower them if sum over
+  // contributing frames is greater than 1
+  if (params.pointc > 0)
+  {
+    weight = clamp(weight, 1, 10000);
+  }
+
+  // color interpolation for red and blue
+  col.rb *= col.g;
+
+  col /= weight;
+  col.a = 1.0;
+
+  col *= w;
+
+  imageStore(img_out, ipos, col);
+
+
+  // To debug mask
+  /*weight.g *= .5;
+  weight *= .025;
+  weight.a = 1;
+  imageStore(img_out, ipos, weight);*/
+}

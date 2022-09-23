@@ -44,12 +44,16 @@ layout( // gradients
 set = 1, binding = 1
 ) uniform sampler2D grad_in;
 
+layout( // input accumulation buffer
+set = 1, binding = 2
+) uniform sampler2D acc_in;
+
 layout( // output f16 rgb accumulation buffer
-    set = 1, binding = 2
+    set = 1, binding = 3
 ) uniform writeonly image2D acc_out;
 
 layout( // output f16 rgb weights
-set = 1, binding = 3
+set = 1, binding = 4
 ) uniform writeonly image2D cont_out;
 
 // this include needs the above parameters
@@ -66,8 +70,8 @@ main()
 
 
   // TODO: support xtrans input
-  vec4 acc = vec4(0, 0, 0, 1);  // because first image
-  vec4 wsum = vec4(0, 0, 0, 1);
+  vec4 acc = texelFetch(acc_in, ipos, 0);  // because first image
+  vec4 wsum = vec4(0, 1, 0, 1); // green channel is already finished
 
   if (params.image == 0 || params.image == -1) {
     for (int i = -SSIZE; i <= SSIZE; i++)
@@ -82,6 +86,15 @@ main()
         vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
         if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
         if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+
+        // continue if rgb or raw and green
+        if (push.filters == 0 || color_vec(sourcepos).g > 0) continue;
+
+        // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
+        float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
+        // float green = texelFetch(acc_in, ivec2(actualsourcepos * res + .5) + ivec2(params.s, params.t), 0).g;
+        // float green = texture(acc_in, (actualsourcepos + .5) / textureSize(img, 0) /*+ 2 * vec2(.5, .5) / textureSize(acc_in, 0)*/).g;
+        // float green = texelFetch(acc_in, ipos, 0).g;
 
         vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
@@ -109,7 +122,7 @@ main()
           else {
             float intensity = texelFetch(img, sourcepos, 0).r;
 
-            acc += weight * intensity * color_vec(sourcepos);
+            acc += weight * intensity * color_vec(sourcepos) / green;
             wsum += weight * color_vec(sourcepos);
           }
         }

@@ -1,0 +1,188 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+#include "config.h"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+  uint i;
+} push;
+
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+  float inc;
+  float sup;
+  float rot;
+  float ani;
+  float mask;
+  float off;
+  int image;
+  float k_det;
+  float k_den;
+  float k_stret;
+  float k_shri;
+  float d_th;
+  float d_tr;
+  int gauss;
+  int pointc;
+  float dmd;
+  float sigmd;
+  float s;
+  float t;
+} params;
+
+layout( // input rggb original
+    set = 1, binding = 0
+) uniform sampler2D img;
+
+layout( // input offsets
+set = 1, binding = 1
+) uniform sampler2D off;
+
+layout( // input mask
+set = 1, binding = 2
+) uniform sampler2D mask_in;
+
+layout( // input accumulation buffer
+set = 1, binding = 3
+) uniform sampler2D acc_in;
+
+layout( // input weights
+set = 1, binding = 4
+) uniform sampler2D cont_in;
+
+layout( // gradients
+set = 1, binding = 5
+) uniform sampler2D grad_in;
+
+layout( // output f16 rgb accumulation buffer
+    set = 1, binding = 6
+) uniform writeonly image2D acc_out;
+
+layout( // output f16 rgb weights
+set = 1, binding = 7
+) uniform writeonly image2D cont_out;
+
+// this include needs the above parameters
+#include "common.glsl"
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
+
+  float res = params.inc + 1.0;
+
+  // vec2 o = 2 * textureLod(off, (ipos+.5)/vec2(2*textureSize(off, 0)), 0).rg;   // should actually be rescaled in align/warp
+  // vec2 epos = ipos + push.offset_scale * 0.1 * texelFetch(off, ipos, 0).xy;   // effective position
+  vec2 epos = vec2(ipos) / res;   // effective position
+  ivec2 spos = ivec2(epos + vec2(.5, .5));
+
+  #ifndef DT_SR_INTERPOLATE_OFFSETS
+  if (params.gauss <= 0)
+    epos += params.off * texelFetch(off, spos, 0).xy;
+  #endif
+
+  // vec2 epos = ipos + o;
+  // vec2 epos = ipos;
+
+  // TODO: support xtrans input
+  vec4 acc_old = texelFetch(acc_in, ipos, 0);
+  vec4 wsum_old = texelFetch(cont_in, ipos, 0);
+
+  vec4 acc = vec4(0, 0, 0, 0);
+  vec4 wsum = vec4(0, 0, 0, 0);
+
+  float mask;
+  if (push.filters == 0)
+    mask = texelFetch(mask_in, spos/4, 0).r;
+  else
+    mask = texelFetch(mask_in, spos/2, 0).r;
+
+  if (push.i == params.image || params.image == -1)
+  {
+    if (mask <= params.cert)
+    {
+      for (int i = -SSIZE; i <= SSIZE; i++)
+      {
+        for (int j = -SSIZE; j <= SSIZE; j++)
+        {
+          float weight;
+          float phi = M_PI * params.rot;
+          float afac = 1 - params.ani;
+          vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
+          #ifndef DT_SR_INTERPOLATE_OFFSETS
+          vec2 opos = epos;   // epos with offset
+          #else
+          vec2 opos = epos + params.off * texture(off, (epos + vec2(i, j) + .5) / textureSize(off, 0)).xy;
+          #endif
+          ivec2 sourcepos = ivec2(opos + vec2(.5, .5)) + ivec2(i, j);// position of sample
+          vec2 actualsourcepos = opos + vec2(i, j);// fp position of source pixel
+          if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
+          if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+
+          // continue if rgb or raw and green
+          if (push.filters == 0 || color_vec(sourcepos).g > 0) continue;
+
+          float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
+          // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
+          // green /= texture(cont_in, (actualsourcepos) / textureSize(img, 0)).g;
+          // float green = texelFetch(acc_in, ipos, 0).g;
+
+          vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
+
+          vec2 sub = opos - vec2(ivec2(opos + vec2(.5, .5)));
+          if (params.sup > 0){
+            eval_gauss(cov, sub - vec2(i, j), weight);
+          } else {
+            grad_proc(grad, vec2(i, j) - sub, weight);
+          }
+
+          // debug gaussians
+          if (params.gauss > 0)
+          {
+            if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
+            acc += weight * vec4(1, 1, 1, 0);
+            wsum += 1 * vec4(1, 1, 1, 0);
+          }
+          else  // normal rendering
+          {
+            if (push.filters == 0)
+            {
+              acc += weight * texelFetch(img, sourcepos, 0);
+              wsum += weight * vec4(1, 1, 1, 0);
+            }
+            else {
+              float intensity = texelFetch(img, sourcepos, 0).r;
+
+              acc += weight * intensity * color_vec(sourcepos) / green;
+              wsum += weight * color_vec(sourcepos);
+            }
+          }
+        }
+      }
+    }
+    // wsum += vec4(.1, .1, .1, 0);
+    // acc = vec4(mask, mask, mask, 1);
+    // wsum = vec4(1, 1, 1, 1);
+  }
+
+  // acc = .2 * vec4(mask, mask, mask, 5);
+  // wsum = vec4(1, 1, 1, 1);
+
+
+  imageStore(acc_out, ipos, acc + acc_old);
+  imageStore(cont_out, ipos, wsum + wsum_old);
+  // imageStore(acc_out, ipos, acc_old);
+  // imageStore(cont_out, ipos, wsum_old);
+  // imageStore(acc_out, ipos, acc);
+  // imageStore(cont_out, ipos, wsum);
+}

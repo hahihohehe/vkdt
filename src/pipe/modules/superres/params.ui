@@ -16,5 +16,5 @@ gauss:slider:0:1
 pointc:slider:0:1
 dmd:slider:0:1
 sigmd:slider:0:1
-s:slider:0:15
-t:slider:0:1
+s:slider:0:5
+t:slider:0:5

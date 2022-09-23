@@ -1,0 +1,154 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform push_t
+{
+  uint filters;
+} push;
+
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float cert;
+  float inc;
+  float sup;
+  float rot;
+  float ani;
+  float mask;
+  float off;
+  int image;
+  float k_det;
+  float k_den;
+  float k_stret;
+  float k_shri;
+  float d_th;
+  float d_tr;
+  int gauss;
+  int pointc;
+  float dmd;
+  float sigmd;
+  float s;
+  float t;
+} params;
+
+layout( // input rggb original
+    set = 1, binding = 0
+) uniform sampler2D img;
+
+layout( // gradients
+set = 1, binding = 1
+) uniform sampler2D grad_in;
+
+layout( // output f16 rgb accumulation buffer
+    set = 1, binding = 2
+) uniform writeonly image2D acc_out;
+
+layout( // output f16 rgb weights
+set = 1, binding = 3
+) uniform writeonly image2D cont_out;
+
+// this include needs the above parameters
+#include "common.glsl"
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, imageSize(acc_out)))) return;
+  float res = params.inc + 1.0;
+
+  vec2 epos = vec2(ipos) / res;
+
+
+  // TODO: support xtrans input
+  vec4 acc = vec4(0, 0, 0, 1);  // because first image
+  vec4 wsum = vec4(0, 0, 0, 1);
+
+  if (params.image == 0 || params.image == -1) {
+    for (int i = -SSIZE; i <= SSIZE; i++)
+    {
+      for (int j = -SSIZE; j <= SSIZE; j++)
+      {
+        float weight;
+        float phi = M_PI * params.rot;
+        float afac = 1 - params.ani;
+        vec4 cov = vec4(params.sup / afac, params.sup * afac, cos(phi), sin(phi));// needs to be replaced according to estimated gradients
+        ivec2 sourcepos = ivec2(epos + vec2(.5, .5)) + ivec2(i, j);// position of sample
+        vec2 actualsourcepos = epos + vec2(i, j);// fp position of source pixel
+        if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
+        if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+
+        // continue if raw and not green
+        if (push.filters != 0 && color_vec(sourcepos).g < 1) continue;
+
+        vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
+
+        vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
+        if (params.sup > 0){
+          eval_gauss(cov, sub - vec2(i, j), weight);
+        } else {
+          grad_proc(grad, vec2(i, j) - sub, weight);
+        }
+
+        // debug gaussians
+        if (params.gauss > 0)
+        {
+          if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
+          acc += weight * vec4(1, 1, 1, 0);
+          wsum += 1 * vec4(1, 1, 1, 0);
+        }
+        else  // normal rendering
+        {
+          if (push.filters == 0)
+          {
+            acc += weight * texelFetch(img, sourcepos, 0);
+            wsum += weight * vec4(1, 1, 1, 0);
+          }
+          else {
+            float intensity = texelFetch(img, sourcepos, 0).r;
+
+            acc += weight * intensity * color_vec(sourcepos) * vec4(0, 1, 0, 0);
+            wsum += weight * color_vec(sourcepos) * vec4(0, 1, 0, 0);
+          }
+        }
+      }
+    }
+  }
+  imageStore(acc_out, ipos, acc);
+  imageStore(cont_out, ipos, wsum);
+
+
+  /*
+  vec4 col;
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);   // offset inside block
+  ivec2 bstart = ipos - boff;
+  float r = texelFetch(img, bstart, 0).r;
+  float g1 = texelFetch(img, bstart + ivec2(0, 1), 0).r;
+  float g2 = texelFetch(img, bstart + ivec2(1, 0), 0).r;
+  float b = texelFetch(img, bstart + ivec2(1, 1), 0).r;
+  if (boff == ivec2(1, 0))
+  {   // green
+    col = vec4(r, g2, b, 1);
+  }
+  else if (boff == ivec2(0, 1))
+  {   // green
+    col = vec4(r, g1, b, 1);
+  }
+  else if (boff == ivec2(0, 0))
+  {   // red
+    col = vec4(r, 0.5 * (g1 + g2), b, 1);
+  }
+  else
+  {   // blue
+    col = vec4(r, 0.5 * (g1 + g2), b, 1);
+  }
+
+  col.g *= 0.5;   // why is that better?
+  imageStore(acc_out, ipos, col);
+  imageStore(cont_out, ipos, vec4(1, 1, 1, 1));*/
+}

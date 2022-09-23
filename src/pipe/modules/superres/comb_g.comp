@@ -109,7 +109,7 @@ main()
 
   if (push.i == params.image || params.image == -1)
   {
-    if (mask >= params.cert)
+    if (mask <= params.cert)
     {
       for (int i = -SSIZE; i <= SSIZE; i++)
       {
@@ -128,6 +128,9 @@ main()
           vec2 actualsourcepos = opos + vec2(i, j);// fp position of source pixel
           if (any(greaterThanEqual(sourcepos, textureSize(img, 0)))) continue;
           if (any(lessThan(sourcepos, ivec2(0, 0)))) continue;
+
+          // continue if raw and not green
+          if (push.filters != 0 && color_vec(sourcepos).g < 1) continue;
 
           vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
@@ -155,8 +158,8 @@ main()
             else {
               float intensity = texelFetch(img, sourcepos, 0).r;
 
-              acc += weight * intensity * color_vec(sourcepos);
-              wsum += weight * color_vec(sourcepos);
+              acc += weight * intensity * color_vec(sourcepos) * vec4(0, 1, 0, 0);
+              wsum += weight * color_vec(sourcepos) * vec4(0, 1, 0, 0);
             }
           }
         }
