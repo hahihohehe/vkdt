@@ -80,7 +80,7 @@ main()
   }
 
   // color interpolation for red and blue
-  col.rb *= col.g;
+  col.rb *= (col.g);
 
   col /= weight;
   col.a = 1.0;

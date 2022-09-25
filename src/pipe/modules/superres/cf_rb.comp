@@ -95,6 +95,7 @@ main()
         // float green = texelFetch(acc_in, ivec2(actualsourcepos * res + .5) + ivec2(params.s, params.t), 0).g;
         // float green = texture(acc_in, (actualsourcepos + .5) / textureSize(img, 0) /*+ 2 * vec2(.5, .5) / textureSize(acc_in, 0)*/).g;
         // float green = texelFetch(acc_in, ipos, 0).g;
+        // green /= (texelFetch(acc_in, ipos, 0).g + 1e-4);
 
         vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
@@ -122,7 +123,7 @@ main()
           else {
             float intensity = texelFetch(img, sourcepos, 0).r;
 
-            acc += weight * intensity * color_vec(sourcepos) / green;
+            acc += weight * intensity * color_vec(sourcepos) / (green + 1e-4);
             wsum += weight * color_vec(sourcepos);
           }
         }
