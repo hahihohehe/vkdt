@@ -109,17 +109,36 @@ main()
 
   vec3 col = vec3(0, 0, 0);
   float wsum = 0;
+
   // overlap by one px
-  for (int i = 0; i < params.down + 2; i++)
+  /*int cent = params.down / 2 + 1;
+  for (int i = -cent; i < params.down + 2 - cent; i++)
   {
-    for (int j = 0; j < params.down + 2; j++)
+    for (int j = -cent; j < params.down + 2 - cent; j++)
     {
       float weight;
-      eval_gauss(vec4(.6, .6, 1, 0), vec2(i - .5 * (params.down - 1) - 1, j - .5 * (params.down - 1) - 1), weight);
+      eval_gauss(vec4(.6, .6, 1, 0), vec2(i, j), weight);
+      wsum += weight;
+      col += weight * texelFetch(img_in, sposbase + ivec2(i, j), 0).rgb;
+    }
+  }*/
+
+  // box filter
+  int cent = params.down / 2;
+  for (int i = -cent; i < params.down - cent; i++)
+  {
+    for (int j = -cent; j < params.down - cent; j++)
+    {
+      float weight = 1.0;
       wsum += weight;
       col += weight * texelFetch(img_in, sposbase + ivec2(i, j), 0).rgb;
     }
   }
+
+  // center pixel only
+  /*wsum = 1;
+  col = texelFetch(img_in, sposbase, 0).rgb;*/
+
 
   //col /= (params.down * params.down);
   col /= wsum;

@@ -31,7 +31,11 @@ void modify_roi_out(
     module->connector[1].roi = roi_out;
     module->connector[2].roi = roi_out;
 
+#ifdef DT_USMPL_RGGB
     module->img_param.filters = 2;
+#else
+    module->img_param.filters = 0;
+#endif
 }
 
 void
