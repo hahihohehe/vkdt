@@ -140,12 +140,14 @@ main()
             grad_proc(grad, vec2(i, j) - sub, weight);
           }
 
-          float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
+          //float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
           // float green = texture(acc_in, (ipos + vec2(i, j) * res + vec2(params.s, params.t) + .5) / textureSize(acc_in, 0)).g;
           // float green = texture(acc_in, ((epos + vec2(i, j) - sub) * res + .5) / textureSize(acc_in, 0)).g;
           // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
-          // float green = texelFetch(acc_in, ipos, 0).g;
+          //float green = texelFetch(acc_in, ipos, 0).g;
           // green /= (texelFetch(acc_in, ipos, 0).g + 1e-4);
+          float green = texture(acc_in, (ipos + res * (vec2(i, j) - sub) + .5) / textureSize(acc_in, 0)).g;
+          green = clamp(green, 0, 1);
 
           // debug gaussians
           if (params.gauss > 0)

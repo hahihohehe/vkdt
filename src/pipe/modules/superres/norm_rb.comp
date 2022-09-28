@@ -80,7 +80,9 @@ main()
   }
 
   // color interpolation for red and blue
-  col.rb *= (col.g);
+  if (push.filters != 0) {
+    col.rb *= (col.g);
+  }
 
   col /= weight;
   col.a = 1.0;

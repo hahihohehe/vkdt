@@ -84,6 +84,8 @@ main()
 
   col *= w;
 
+  col = clamp(col, 0, 1);
+
   imageStore(img_out, ipos, col);
 
 

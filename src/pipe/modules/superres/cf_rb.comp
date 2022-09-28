@@ -90,13 +90,6 @@ main()
         // continue if rgb or raw and green
         if (push.filters == 0 || color_vec(sourcepos).g > 0) continue;
 
-        // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
-        float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
-        // float green = texelFetch(acc_in, ivec2(actualsourcepos * res + .5) + ivec2(params.s, params.t), 0).g;
-        // float green = texture(acc_in, (actualsourcepos + .5) / textureSize(img, 0) /*+ 2 * vec2(.5, .5) / textureSize(acc_in, 0)*/).g;
-        // float green = texelFetch(acc_in, ipos, 0).g;
-        // green /= (texelFetch(acc_in, ipos, 0).g + 1e-4);
-
         vec2 grad = texelFetch(grad_in, sourcepos, 0).xy;
 
         vec2 sub = epos - vec2(ivec2(epos + vec2(.5, .5)));
@@ -105,6 +98,14 @@ main()
         } else {
           grad_proc(grad, vec2(i, j) - sub, weight);
         }
+
+        // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
+        //float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
+        // float green = texelFetch(acc_in, ivec2(actualsourcepos * res + .5) + ivec2(params.s, params.t), 0).g;
+        // float green = texture(acc_in, (actualsourcepos + .5) / textureSize(img, 0) /*+ 2 * vec2(.5, .5) / textureSize(acc_in, 0)*/).g;
+        // float green = texelFetch(acc_in, ipos, 0).g;
+        float green = texture(acc_in, (ipos + res * (vec2(i, j) - sub) + .5) / textureSize(acc_in, 0)).g;
+        green = clamp(green, 0, 1);
 
         // debug gaussians
         if (params.gauss > 0)
