@@ -466,6 +466,9 @@ int read_source(
   wd /= SIZE_DIV;
   ht /= SIZE_DIV;
 
+  ox += (dim_uncropped.x - wd) / 2;
+  oy += (dim_uncropped.y - ht) / 2;
+
   // round down to full block size:
   const int block = mod->img_param.filters == 9u ? 3 : 2;
   wd = (wd/block)*block;
