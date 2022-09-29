@@ -67,10 +67,24 @@ out float weight)
   k2 = clamp(k2, params.t, 100);*/
 
   /*float A = clamp(1 + sqrt(l1 / l2), 1, 10);*/
-  float k1 = 2 * k_stretch * k_detail;
-  float k2 = k_detail / (k_shrink * 2);
+  /*float k1 = 2 * k_stretch * k_detail;
+  float k2 = k_detail / (k_shrink * 2);*/
   /*float k1 = .35 * A;
   float k2 = .15;*/
+
+  float sldif = (l1 - l2) * (l1 - l2);
+  float slsum = (l1 + l2) * (l1 + l2);
+  float A = clamp(1 + sqrt(sldif / slsum), 1, 10);
+  float D = clamp(1 - sqrt(l1) / D_tr + D_th, 0, 1);
+  // D = 0;
+  float k1_ = k_detail * k_stretch * A;
+  float k2_ = k_detail / (k_shrink * A);
+  float k1 = ((1 - D) * k1_ + D * k_detail * k_denoise);
+  k1 *= k1;
+  k1 = clamp(k1, params.t, 100);
+  float k2 = ((1 - D) * k2_ + D * k_detail * k_denoise);
+  k2 *= k2;
+  k2 = clamp(k2, params.t, 100);
 
   vec2 of = vec2(dot(off, evec1), dot(off, evec0));
   weight = clamp(3 * exp(-0.5*dot(of/vec2(k1, k2), of)), 1e-6, 1);
