@@ -84,6 +84,13 @@ main()
     col.rb *= (col.g);
   }
 
+  if (params.gauss > 0) {
+    col.r = col.g;
+    col.b = col.g;
+    imageStore(img_out, ipos, col);
+    return;
+  }
+
   col /= weight;
   col.a = 1.0;
 

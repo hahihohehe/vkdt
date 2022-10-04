@@ -152,9 +152,9 @@ main()
           // debug gaussians
           if (params.gauss > 0)
           {
-            if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
+            /*if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
             acc += weight * vec4(1, 1, 1, 0);
-            wsum += 1 * vec4(1, 1, 1, 0);
+            wsum += 1 * vec4(1, 1, 1, 0);*/
           }
           else  // normal rendering
           {
