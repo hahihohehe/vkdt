@@ -267,7 +267,11 @@ create_nodes(
             };
 
             // connect grad
+#ifndef DT_SR_REF_GRAD
             CONN(dt_node_connect(graph, id_grad[i+1], 1, id_combine, 5));     // grad
+#else
+            CONN(dt_node_connect(graph, id_grad[0], 1, id_combine, 5));     // grad
+#endif
             // connect to previous node
             if (num_connected == 0)
             {       // this is the first combine node after cf
@@ -493,7 +497,11 @@ create_nodes(
                 };
 
                 // connect grad
+#ifndef DT_SR_REF_GRAD
                 CONN(dt_node_connect(graph, id_grad[i+1], 1, id_combine, 5));     // grad
+#else
+                CONN(dt_node_connect(graph, id_grad[0], 1, id_combine, 5));     // grad
+#endif
                 // connect to previous node
                 if (connection_counter == 0)
                 {       // this is the first combine node after cf
