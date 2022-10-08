@@ -27,15 +27,17 @@ void modify_roi_out(
         dt_graph_t *graph,
         dt_module_t *module)
 {
+    const int block = module->img_param.filters == 9u ? 3 : (module->img_param.filters == 0 ? 1 : 2);
+
     dt_roi_t roi_out = module->connector[0].roi;
-    roi_out.full_wd += 1;
-    roi_out.full_wd /= 2;
-    roi_out.full_ht += 1;
-    roi_out.full_ht /= 2;
-    roi_out.wd += 1;
-    roi_out.wd /= 2;
-    roi_out.ht += 1;
-    roi_out.ht /= 2;
+    roi_out.full_wd += (block - 1);
+    roi_out.full_wd /= block;
+    roi_out.full_ht += (block - 1);
+    roi_out.full_ht /= block;
+    roi_out.wd += (block - 1);
+    roi_out.wd /= block;
+    roi_out.ht += (block - 1);
+    roi_out.ht /= block;
 
     module->connector[1].roi = roi_out;
     module->connector[2].roi = module->connector[0].roi;
@@ -84,6 +86,7 @@ create_nodes(
     };
     dt_connector_copy(graph, module, 0, id_guide, 0);
     dt_connector_copy(graph, module, 2, id_guide, 1);
+    dt_connector_copy(graph, module, 1, id_guide, 2);
 
     assert(graph->num_nodes < graph->max_nodes);
     int id_guide_ref = graph->num_nodes++;
@@ -212,7 +215,7 @@ create_nodes(
                           },{
                                   .name   = dt_token("output"),
                                   .type   = dt_token("write"),
-                                  .chan   = dt_token("y"),
+                                  .chan   = dt_token("rgba"),
                                   .format = dt_token("f16"),
                                   .roi    = module->connector[1].roi,
                           }},

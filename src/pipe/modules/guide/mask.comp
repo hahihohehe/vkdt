@@ -6,6 +6,15 @@
 
 layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
 
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float dmd;
+  float sigmd;
+  float s;
+  float t;
+  float smot;
+} params;
+
 layout( // input buffer rgba
 set = 1, binding = 0
 ) uniform sampler2D img_in;
@@ -22,9 +31,39 @@ layout( // output gradients
 set = 1, binding = 3
 ) uniform writeonly image2D mask_out;
 
+float hue(vec3 rgb)
+{
+  float m = min(rgb.r, min(rgb.b, rgb.g));
+  float M = max(rgb.r, max(rgb.b, rgb.g));
+  if (m == M)
+  {
+    return 0;
+  }
+  else if (M == rgb.r)
+  {
+    return 60 * (0 + (rgb.g - rgb.b) / (M - m));
+  }
+  else if (M == rgb.g)
+  {
+    return 60 * (2 + (rgb.b - rgb.r) / (M - m));
+  }
+  else if (M == rgb.b)
+  {
+    return 60 * (4 + (rgb.r - rgb.g) / (M - m));
+  }
+  return 0;
+}
+
 float diff(vec3 a, vec3 b)
 {
-  return abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z);
+  //return abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z);
+  return dot(10 * (a-b), 10 * (a-b));
+  /*float hdiff = abs(hue(a) - hue(b));
+  if (hdiff > 180)
+  {
+    hdiff = 360 - hdiff;
+  }
+  return hdiff / 180;*/
 }
 
 void
@@ -43,21 +82,6 @@ main()
   vec3 m8 = texelFetch(img_in, ipos + ivec2(0, 1), 0).rgb;
   vec3 m9 = texelFetch(img_in, ipos + ivec2(1, 1), 0).rgb;
 
-  vec3 mean = (m1 + m2 + m3 + m4 + m5 + m6 + m7 + m8 + m9) / 9;
-
-  // local spatial variance
-  float variance = 0;
-  variance += diff(m1, mean) * diff(m1, mean);
-  variance += diff(m2, mean) * diff(m2, mean);
-  variance += diff(m3, mean) * diff(m3, mean);
-  variance += diff(m4, mean) * diff(m4, mean);
-  variance += diff(m5, mean) * diff(m5, mean);
-  variance += diff(m6, mean) * diff(m6, mean);
-  variance += diff(m7, mean) * diff(m7, mean);
-  variance += diff(m8, mean) * diff(m8, mean);
-  variance += diff(m9, mean) * diff(m9, mean);
-  variance /= 9;
-
   // color difference
   vec3 r1 = texelFetch(ref_in, ipos + ivec2(-1, -1), 0).rgb;
   vec3 r2 = texelFetch(ref_in, ipos + ivec2(0, -1), 0).rgb;
@@ -68,6 +92,35 @@ main()
   vec3 r7 = texelFetch(ref_in, ipos + ivec2(-1, 1), 0).rgb;
   vec3 r8 = texelFetch(ref_in, ipos + ivec2(0, 1), 0).rgb;
   vec3 r9 = texelFetch(ref_in, ipos + ivec2(1, 1), 0).rgb;
+
+  vec3 mean = (r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9) / 9;
+
+  // local spatial variance
+  float r_var = 0;
+  r_var += diff(r1, mean) * diff(r1, mean);
+  r_var += diff(r2, mean) * diff(r2, mean);
+  r_var += diff(r3, mean) * diff(r3, mean);
+  r_var += diff(r4, mean) * diff(r4, mean);
+  r_var += diff(r5, mean) * diff(r5, mean);
+  r_var += diff(r6, mean) * diff(r6, mean);
+  r_var += diff(r7, mean) * diff(r7, mean);
+  r_var += diff(r8, mean) * diff(r8, mean);
+  r_var += diff(r9, mean) * diff(r9, mean);
+  r_var /= 9;
+
+  float m_var = 0;
+  m_var += diff(m1, mean) * diff(m1, mean);
+  m_var += diff(m2, mean) * diff(m2, mean);
+  m_var += diff(m3, mean) * diff(m3, mean);
+  m_var += diff(m4, mean) * diff(m4, mean);
+  m_var += diff(m5, mean) * diff(m5, mean);
+  m_var += diff(m6, mean) * diff(m6, mean);
+  m_var += diff(m7, mean) * diff(m7, mean);
+  m_var += diff(m8, mean) * diff(m8, mean);
+  m_var += diff(m9, mean) * diff(m9, mean);
+  m_var /= 9;
+
+  float variance = min(r_var, m_var);
 
   float coldiff = 0;
   coldiff += diff(r1, m1);
@@ -81,26 +134,30 @@ main()
   coldiff += diff(r9, m9);
   coldiff /= 9;
 
+  // float R = 1 - coldiff;
+
   float d2 = coldiff * coldiff;
 
-  float sigmd = 0.00001;
+  float sigmd = params.sigmd;
   variance = max(sigmd, variance);
-  float dmd = 0;
+  //variance = 1;
+  float dmd = params.dmd;
   coldiff = coldiff * d2 / (d2 + dmd * dmd);
   d2 = coldiff * coldiff;
-  float s = 2;
-  float t = .20;
+  float s = params.s;
+  float t = params.t;
 
   // ======================================================
   // Local motion estimation
   float mot = texelFetch(mot_in, ipos, 0).r;
   if (mot > .2)
   {
-    s = 12;
+    s = params.smot;
   }
   // ======================================================
 
   float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
+  // float R = clamp(coldiff, 0, 1);
   //float R = clamp(1 * diff(m5, r5), 0, 1);
 
   imageStore(mask_out, ipos, vec4(R, R, R, R));
