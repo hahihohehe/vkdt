@@ -146,7 +146,9 @@ main()
           // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
           //float green = texelFetch(acc_in, ipos, 0).g;
           // green /= (texelFetch(acc_in, ipos, 0).g + 1e-4);
+          // float green = texelFetch(acc_in, ivec2(vec2(ipos) + res * (vec2(i, j) - sub) + 0.5), 0).g;
           float green = texture(acc_in, (ipos + res * (vec2(i, j) - sub) + .5) / textureSize(acc_in, 0)).g;
+          float greenref = texelFetch(acc_in, ipos, 0).g;
           green = clamp(green, 0, 1);
 
           // debug gaussians
@@ -165,8 +167,9 @@ main()
             }
             else {
               float intensity = texelFetch(img, sourcepos, 0).r;
+              intensity += (greenref - green);
 
-              acc += weight * intensity * color_vec(sourcepos) / (green + 1e-4);
+              acc += weight * intensity * color_vec(sourcepos);
               wsum += weight * color_vec(sourcepos);
             }
           }

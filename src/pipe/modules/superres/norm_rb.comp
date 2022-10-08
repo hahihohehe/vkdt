@@ -80,7 +80,7 @@ main()
   }
 
   // color interpolation for red and blue
-  if (push.filters != 0 && params.gauss == 0) {
+  if (false && push.filters != 0 && params.gauss == 0) {
     col.rb *= (col.g);
   }
 
