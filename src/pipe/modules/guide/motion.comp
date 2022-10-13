@@ -19,6 +19,8 @@ float diff(vec3 a, vec3 b)
   return abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z);
 }
 
+#define RAD 2
+
 void
 main()
 {
@@ -27,9 +29,9 @@ main()
 
   vec2 M = texelFetch(mv_in, 2 * ipos, 0).xy;
   vec2 m = M;
-  for (int i = -1; i <= 1; i++)
+  for (int i = -RAD; i <= RAD; i++)
   {
-    for (int j = -1; j <= 1; j++)
+    for (int j = -RAD; j <= RAD; j++)
     {
       vec2 v = texelFetch(mv_in, 2 * (ipos + ivec2(i, j)), 0).xy;
       m = min(m, v);
@@ -37,8 +39,8 @@ main()
     }
   }
 
-  float mov = length(M - m);
+  float mov = .02 * length(M - m);
 
 
-  imageStore(mot_out, ipos, vec4(mov, mov, mov, mov));
+  imageStore(mot_out, ipos, vec4(mov, mov, mov, 1));
 }
