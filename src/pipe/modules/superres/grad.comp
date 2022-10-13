@@ -43,12 +43,12 @@ main()
   float h_2 = F_4 - F_6;
   float h_3 = F_7 - F_9;
 
-  vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
-  // vec2 I_F = .5 * vec2(h_2, v_2);
+  // vec2 I_F = vec2(0.5 * h_2 + 0.25 * h_1 + 0.25 * h_3, 0.5 * v_2 + 0.25 * v_1 + 0.25 * v_3);
+  vec2 I_F = .5 * vec2(h_2, v_2);
 
 
   // strategy that only uses green channel
-  /*ivec2 boff = ivec2(ipos.x%2, ipos.y%2);// offset inside block
+  ivec2 boff = ivec2(ipos.x%2, ipos.y%2);// offset inside block
   if (boff == ivec2(1, 0) || boff == ivec2(0, 1))
   { // green
     I_F = vec2(h_1 + h_3, v_1 + v_3);
@@ -58,7 +58,7 @@ main()
   { // not green
     I_F = vec2(h_2, v_2);
     I_F *= .5;
-  }*/
+  }
 
 
   I_F *= vec2(-1, -1);
