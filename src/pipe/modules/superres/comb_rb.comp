@@ -110,7 +110,7 @@ main()
 
   if (push.i == params.image || params.image == -1)
   {
-    if (mask <= params.cert)
+    if (mask >= params.cert)
     {
       for (int i = -SSIZE; i <= SSIZE; i++)
       {
@@ -140,23 +140,18 @@ main()
             grad_proc(grad, vec2(i, j) - sub, weight);
           }
 
-          //float green = texelFetch(acc_in, ipos + ivec2(i, j) + ivec2(params.s, params.t), 0).g;
-          // float green = texture(acc_in, (ipos + vec2(i, j) * res + vec2(params.s, params.t) + .5) / textureSize(acc_in, 0)).g;
-          // float green = texture(acc_in, ((epos + vec2(i, j) - sub) * res + .5) / textureSize(acc_in, 0)).g;
-          // float green = texture(acc_in, (actualsourcepos * res + .5) / textureSize(acc_in, 0)).g;
+          // No color correction
           //float green = texelFetch(acc_in, ipos, 0).g;
-          // green /= (texelFetch(acc_in, ipos, 0).g + 1e-4);
+
+          // Color correction (interpolated green channel)
           float green = texture(acc_in, (ipos + res * (vec2(i, j) - sub) + .5) / textureSize(acc_in, 0)).g;
+
+          // Color correction (nearest green pixel)
+          //float green = texelFetch(acc_in, ivec2(ipos + res * (vec2(i, j) - sub) + .5), 0).g;
+
           green = clamp(green, 0, 1);
 
-          // debug gaussians
-          if (params.gauss > 0)
-          {
-            /*if (sourcepos.x % 5 == 0 && sourcepos.y % 5 == 0)
-            acc += weight * vec4(1, 1, 1, 0);
-            wsum += 1 * vec4(1, 1, 1, 0);*/
-          }
-          else  // normal rendering
+          if (params.gauss == 0) // normal rendering
           {
             if (push.filters == 0)
             {
@@ -173,19 +168,9 @@ main()
         }
       }
     }
-    // wsum += vec4(.1, .1, .1, 0);
-    // acc = vec4(mask, mask, mask, 1);
-    // wsum = vec4(1, 1, 1, 1);
   }
-
-  // acc = .2 * vec4(mask, mask, mask, 5);
-  // wsum = vec4(1, 1, 1, 1);
 
 
   imageStore(acc_out, ipos, acc + acc_old);
   imageStore(cont_out, ipos, wsum + wsum_old);
-  // imageStore(acc_out, ipos, acc_old);
-  // imageStore(cont_out, ipos, wsum_old);
-  // imageStore(acc_out, ipos, acc);
-  // imageStore(cont_out, ipos, wsum);
 }

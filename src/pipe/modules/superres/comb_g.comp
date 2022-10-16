@@ -109,7 +109,7 @@ main()
 
   if (push.i == params.image || params.image == -1)
   {
-    if (mask <= params.cert)
+    if (mask >= params.cert)
     {
       for (int i = -SSIZE; i <= SSIZE; i++)
       {
@@ -165,19 +165,9 @@ main()
         }
       }
     }
-    // wsum += vec4(.1, .1, .1, 0);
-    // acc = vec4(mask, mask, mask, 1);
-    // wsum = vec4(1, 1, 1, 1);
   }
-
-  // acc = .2 * vec4(mask, mask, mask, 5);
-  // wsum = vec4(1, 1, 1, 1);
 
 
   imageStore(acc_out, ipos, acc + acc_old);
   imageStore(cont_out, ipos, wsum + wsum_old);
-  // imageStore(acc_out, ipos, acc_old);
-  // imageStore(cont_out, ipos, wsum_old);
-  // imageStore(acc_out, ipos, acc);
-  // imageStore(cont_out, ipos, wsum);
 }
