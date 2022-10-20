@@ -42,11 +42,7 @@ out float weight)
   float l1 = eval.x;
   float l2 = eval.y;
 
-  // configuration parameters
-  /*float k_detail = 0.2;
-  float k_denoise = 3;
-  float k_stretch = 4;
-  float k_shrink = 2;*/
+  // Configuration parameters
   float k_detail = params.k_det;
   float k_denoise = params.k_den;
   float k_stretch = params.k_stret;
@@ -54,6 +50,7 @@ out float weight)
   float D_th = params.d_th;
   float D_tr = params.d_tr;
 
+  // Wronski et al. with clamped k2
   float A = clamp(1 + sqrt(l1 / l2), 1, 10);
   float D = clamp(1 - sqrt(l1) / D_tr + D_th, 0, 1);
   // D = 0;
@@ -66,12 +63,17 @@ out float weight)
   k2 *= k2;
   k2 = clamp(k2, params.t, 100);
 
-  /*float A = clamp(1 + sqrt(l1 / l2), 1, 10);*/
-  /*float k1 = 2 * k_stretch * k_detail;
-  float k2 = k_detail / (k_shrink * 2);*/
-  /*float k1 = .35 * A;
+  // Only use A
+  /*float A = clamp(1 + sqrt(l1 / l2), 1, 10);
+  float k1 = .35 * A;
   float k2 = .15;*/
 
+  // Do not use A - factor 2 is for compatibility with range of sliders
+  /*float k1 = 2 * k_stretch * k_detail;
+  float k2 = k_detail / (4 * k_shrink);*/
+
+
+  // Kunz
   /*float sldif = (l1 - l2) * (l1 - l2);
   float slsum = (l1 + l2) * (l1 + l2);
   float A = clamp(sqrt(sldif / slsum), 0, 10);
