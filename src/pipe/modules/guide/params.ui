@@ -1,5 +1,6 @@
-dmd:slider:0:1
-sigmd:slider:0:0.1
+dmd:slider:0:0.1
+sigmd:slider:0:0.005
 s:slider:0:10
 t:slider:0:10
 smot:slider:0:10
+mth:slider:0:1

@@ -13,6 +13,7 @@ layout(std140, set = 0, binding = 1) uniform params_t
   float s;
   float t;
   float smot;
+  float mth;
 } params;
 
 layout( // input buffer rgba
@@ -93,34 +94,37 @@ main()
   vec3 r8 = texelFetch(ref_in, ipos + ivec2(0, 1), 0).rgb;
   vec3 r9 = texelFetch(ref_in, ipos + ivec2(1, 1), 0).rgb;
 
-  vec3 mean = (r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9) / 9;
+  vec3 ref_mean = (r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9) / 9.0;
+  vec3 cand_mean = (m1 + m2 + m3 + m4 + m5 + m6 + m7 + m8 + m9) / 9.0;
+
 
   // local spatial variance
   float r_var = 0;
-  r_var += diff(r1, mean) * diff(r1, mean);
-  r_var += diff(r2, mean) * diff(r2, mean);
-  r_var += diff(r3, mean) * diff(r3, mean);
-  r_var += diff(r4, mean) * diff(r4, mean);
-  r_var += diff(r5, mean) * diff(r5, mean);
-  r_var += diff(r6, mean) * diff(r6, mean);
-  r_var += diff(r7, mean) * diff(r7, mean);
-  r_var += diff(r8, mean) * diff(r8, mean);
-  r_var += diff(r9, mean) * diff(r9, mean);
+  r_var += diff(r1, ref_mean) * diff(r1, ref_mean);
+  r_var += diff(r2, ref_mean) * diff(r2, ref_mean);
+  r_var += diff(r3, ref_mean) * diff(r3, ref_mean);
+  r_var += diff(r4, ref_mean) * diff(r4, ref_mean);
+  r_var += diff(r5, ref_mean) * diff(r5, ref_mean);
+  r_var += diff(r6, ref_mean) * diff(r6, ref_mean);
+  r_var += diff(r7, ref_mean) * diff(r7, ref_mean);
+  r_var += diff(r8, ref_mean) * diff(r8, ref_mean);
+  r_var += diff(r9, ref_mean) * diff(r9, ref_mean);
   r_var /= 9;
 
   float m_var = 0;
-  m_var += diff(m1, mean) * diff(m1, mean);
-  m_var += diff(m2, mean) * diff(m2, mean);
-  m_var += diff(m3, mean) * diff(m3, mean);
-  m_var += diff(m4, mean) * diff(m4, mean);
-  m_var += diff(m5, mean) * diff(m5, mean);
-  m_var += diff(m6, mean) * diff(m6, mean);
-  m_var += diff(m7, mean) * diff(m7, mean);
-  m_var += diff(m8, mean) * diff(m8, mean);
-  m_var += diff(m9, mean) * diff(m9, mean);
+  m_var += diff(m1, cand_mean) * diff(m1, cand_mean);
+  m_var += diff(m2, cand_mean) * diff(m2, cand_mean);
+  m_var += diff(m3, cand_mean) * diff(m3, cand_mean);
+  m_var += diff(m4, cand_mean) * diff(m4, cand_mean);
+  m_var += diff(m5, cand_mean) * diff(m5, cand_mean);
+  m_var += diff(m6, cand_mean) * diff(m6, cand_mean);
+  m_var += diff(m7, cand_mean) * diff(m7, cand_mean);
+  m_var += diff(m8, cand_mean) * diff(m8, cand_mean);
+  m_var += diff(m9, cand_mean) * diff(m9, cand_mean);
   m_var /= 9;
 
-  float variance = min(r_var, m_var);
+  //float variance = min(r_var, m_var);
+  float variance = m_var;
 
   float coldiff = 0;
   coldiff += diff(r1, m1);
@@ -133,6 +137,10 @@ main()
   coldiff += diff(r8, m8);
   coldiff += diff(r9, m9);
   coldiff /= 9;
+
+
+  //float coldiff = diff(ref_mean, cand_mean);
+
 
   // float R = 1 - coldiff;
 
@@ -150,12 +158,14 @@ main()
   // ======================================================
   // Local motion estimation
   float mot = texelFetch(mot_in, ipos, 0).r;
-  if (mot > .2)
+  if (mot > params.mth)
   {
     s = params.smot;
   }
   // ======================================================
 
+  //float R = clamp(100 * variance, 0, 1);
+  //float R = clamp(d2 / variance, 0, 1);
   float R = clamp(s * exp(-d2 / variance) - t, 0, 1);
   // float R = clamp(coldiff, 0, 1);
   //float R = clamp(1 * diff(m5, r5), 0, 1);
