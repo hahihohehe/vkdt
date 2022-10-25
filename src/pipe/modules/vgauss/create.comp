@@ -1,0 +1,49 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#extension GL_EXT_nonuniform_qualifier    : enable
+
+#include "shared.glsl"
+#include "config.h"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+// global uniform stuff about image and roi
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  float rot;
+  float k1;
+  float k2;
+  float xoff;
+  float yoff;
+} params;
+
+layout( // output rgba
+set = 1, binding = 0
+) uniform writeonly image2D img_out;
+
+void
+eval_gauss(
+vec4 cov, vec2 off,
+out float weight)
+{
+  dvec2 eval = clamp(cov.xy, 0.01, 25); // the lower bound has direct impact on sharpness
+  dmat2 E = dmat2(cov.z, -cov.w,
+  cov.w,  cov.z);
+  dvec2 of = E * off;
+  weight = clamp(exp(float(-0.5*dot(of/eval, of))), 1e-4, 1);
+}
+
+void
+main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+
+  if(any(greaterThanEqual(ipos, imageSize(img_out)))) return;
+
+  vec4 cov = vec4(params.k1, params.k2, cos(params.rot), sin(params.rot));
+  float weight;
+  eval_gauss(cov, 3 * ((vec2(ipos) - 500) / 1000) + vec2(params.xoff, params.yoff), weight);
+
+
+  imageStore(img_out, ipos, vec4(weight, weight, weight, 1));
+}
